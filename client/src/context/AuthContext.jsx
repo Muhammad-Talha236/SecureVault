@@ -1,4 +1,5 @@
 import { createContext, useContext, useEffect, useState, useCallback } from "react";
+import { refreshSession, secureFetch } from "../utils/api.js";
 
 const AuthContext = createContext(null);
 
@@ -6,7 +7,7 @@ export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [loading, setLoading] = useState(true);
 
-  // Check current session on mount via GET /api/auth/me
+  // Check current session on mount via GET /api/auth/me or silent refresh
   const checkAuth = useCallback(async () => {
     try {
       const res = await fetch("/api/auth/me", {
@@ -18,18 +19,9 @@ export function AuthProvider({ children }) {
         const data = await res.json();
         setUser(data.user);
       } else {
-        // Attempt silent session refresh if access token expired
-        const refreshRes = await fetch("/api/auth/refresh", {
-          method: "POST",
-          credentials: "include",
-        });
-
-        if (refreshRes.ok) {
-          const refreshData = await refreshRes.json();
-          setUser(refreshData.user);
-        } else {
-          setUser(null);
-        }
+        // Attempt deduplicated silent session refresh if access token expired
+        const refreshedUser = await refreshSession();
+        setUser(refreshedUser || null);
       }
     } catch (_err) {
       setUser(null);

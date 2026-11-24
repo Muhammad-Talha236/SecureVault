@@ -4,6 +4,7 @@ import mongoose from "mongoose";
 import Document from "../models/document.model.js";
 import DocumentPermission from "../models/documentPermission.model.js";
 import AuditLog from "../models/auditLog.model.js";
+import User from "../models/user.model.js";
 import { encryptBuffer, decryptBuffer, computeSha256 } from "../utils/encryption.utils.js";
 import { supabase, SUPABASE_BUCKET } from "../config/supabase.js";
 import { logAuditEvent } from "../utils/audit.utils.js";
@@ -180,7 +181,7 @@ export const getDashboardData = async (req, res) => {
   ]);
   const totalSizeBytes = storageAgg[0]?.totalBytes || 0;
 
-  // 3. Fetch 5 most recent documents
+  // 3. Fetch 5 most recent documents (metadata only, no encryption keys)
   const recentDocs = await Document.find(docFilter)
     .sort({ createdAt: -1 })
     .limit(5)
@@ -196,19 +197,119 @@ export const getDashboardData = async (req, res) => {
     createdAt: doc.createdAt,
   }));
 
-  // 4. Fetch 5 most recent audit activities
-  const auditFilter = isAdmin ? {} : { actor: userId };
-  const recentAuditLogs = await AuditLog.find(auditFilter)
-    .sort({ createdAt: -1 })
-    .limit(5)
-    .lean();
+  // 4. Role-specific telemetry
+  if (isAdmin) {
+    // Admin metrics: Registered users, platform documents, storage, security events
+    const [totalUsers, securityEventsCount, recentUsers, rawAuditLogs, rawSecurityEvents] = await Promise.all([
+      User.countDocuments({}),
+      AuditLog.countDocuments({
+        $or: [
+          { outcome: { $in: ["DENIED", "FAILURE"] } },
+          { action: { $in: ["ACCESS_DENIED", "LOGIN_FAILURE"] } },
+        ],
+      }),
+      User.find({})
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .select("_id name email role createdAt")
+        .lean(),
+      AuditLog.find({})
+        .populate("actor", "name email role")
+        .sort({ createdAt: -1 })
+        .limit(8)
+        .lean(),
+      AuditLog.find({
+        $or: [
+          { outcome: { $in: ["DENIED", "FAILURE"] } },
+          { action: { $in: ["ACCESS_DENIED", "LOGIN_FAILURE"] } },
+        ],
+      })
+        .populate("actor", "name email role")
+        .sort({ createdAt: -1 })
+        .limit(5)
+        .lean(),
+    ]);
 
-  const formattedActivities = recentAuditLogs.map((log) => {
+    const formattedActivities = rawAuditLogs.map((log) => {
+      let title = log.action;
+      if (log.action === "DOCUMENT_UPLOAD") {
+        title = `Uploaded ${log.metadata?.originalName || "document"}`;
+      } else if (log.action === "LOGIN_SUCCESS") {
+        title = "Signed in securely";
+      } else if (log.action === "LOGIN_FAILURE") {
+        title = "Failed sign-in attempt";
+      } else if (log.action === "DOCUMENT_DOWNLOAD") {
+        title = `Downloaded ${log.metadata?.originalName || "document"}`;
+      } else if (log.action === "DOCUMENT_DELETE") {
+        title = `Deleted ${log.metadata?.originalName || "document"}`;
+      } else if (log.action === "ACCESS_DENIED") {
+        title = "Unauthorized access attempt blocked";
+      }
+
+      return {
+        id: log._id,
+        title,
+        action: log.action,
+        actorName: log.actor?.name || "System / Unauthenticated",
+        actorEmail: log.actor?.email || null,
+        actorRole: log.actor?.role || null,
+        resourceType: log.resourceType,
+        outcome: log.outcome,
+        time: log.createdAt,
+      };
+    });
+
+    const formattedSecurityEvents = rawSecurityEvents.map((log) => ({
+      id: log._id,
+      action: log.action,
+      resourceType: log.resourceType,
+      outcome: log.outcome,
+      actorName: log.actor?.name || "Unauthenticated Client",
+      ipAddress: log.ipAddress || "Unknown IP",
+      time: log.createdAt,
+    }));
+
+    return res.status(200).json({
+      success: true,
+      stats: {
+        totalDocuments,
+        totalSizeBytes,
+        formattedStorage: formatBytes(totalSizeBytes),
+        totalUsers,
+        securityEvents: securityEventsCount,
+      },
+      recentFiles: formattedRecentFiles,
+      activities: formattedActivities,
+      recentUsers: recentUsers.map((u) => ({
+        id: u._id,
+        name: u.name,
+        email: u.email,
+        role: u.role,
+        createdAt: u.createdAt,
+      })),
+      securityEvents: formattedSecurityEvents,
+    });
+  }
+
+  // Standard User metrics: User documents, shared files count, user storage
+  const [sharedFilesCount, rawUserLogs] = await Promise.all([
+    DocumentPermission.countDocuments({ user: userId, status: "ACTIVE" }),
+    AuditLog.find({ actor: userId })
+      .sort({ createdAt: -1 })
+      .limit(6)
+      .lean(),
+  ]);
+
+  const formattedActivities = rawUserLogs.map((log) => {
     let title = log.action;
     if (log.action === "DOCUMENT_UPLOAD") {
       title = `Uploaded ${log.metadata?.originalName || "document"}`;
     } else if (log.action === "LOGIN_SUCCESS") {
       title = "Signed in securely";
+    } else if (log.action === "DOCUMENT_DOWNLOAD") {
+      title = `Downloaded ${log.metadata?.originalName || "document"}`;
+    } else if (log.action === "DOCUMENT_DELETE") {
+      title = `Deleted ${log.metadata?.originalName || "document"}`;
     }
 
     return {
@@ -224,6 +325,7 @@ export const getDashboardData = async (req, res) => {
     success: true,
     stats: {
       totalDocuments,
+      sharedFiles: sharedFilesCount,
       totalSizeBytes,
       formattedStorage: formatBytes(totalSizeBytes),
     },

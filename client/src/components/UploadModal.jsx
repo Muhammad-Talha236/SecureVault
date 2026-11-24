@@ -15,6 +15,7 @@ import {
   Trash2,
   FileCode,
 } from "lucide-react";
+import { secureFetch } from "../utils/api.js";
 import "./UploadModal.css";
 
 const MAX_FILE_SIZE = 25 * 1024 * 1024; // 25 MB
@@ -147,9 +148,8 @@ export default function UploadModal({ isOpen, onClose, onUploadSuccess }) {
       const formData = new FormData();
       formData.append("file", selectedFile);
 
-      const res = await fetch("/api/documents", {
+      const res = await secureFetch("/api/documents", {
         method: "POST",
-        credentials: "include",
         body: formData,
       });
 

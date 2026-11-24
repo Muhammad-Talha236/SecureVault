@@ -138,10 +138,16 @@ export const login = async (req, res) => {
 
 /**
  * Refresh access token using refresh token rotation and replay detection
+ * Supports a 30-second concurrency leeway grace period to handle simultaneous/parallel
+ * API refresh requests without erroneously terminating the user's active session.
  * POST /api/auth/refresh
  */
 export const refreshToken = async (req, res) => {
-  const rawToken = req.cookies?.refreshToken || req.body?.refreshToken;
+  const rawToken =
+    req.cookies?.refreshToken ||
+    req.cookies?.refresh_token ||
+    req.body?.refreshToken ||
+    req.body?.refresh_token;
 
   if (!rawToken || typeof rawToken !== "string") {
     throw new AppError("Refresh token is required.", 401);
@@ -155,18 +161,58 @@ export const refreshToken = async (req, res) => {
   if (!tokenRecord) {
     // Clear cookies if token is completely unknown
     res.clearCookie("accessToken", getClearCookieOptions(false));
+    res.clearCookie("access_token", getClearCookieOptions(false));
     res.clearCookie("refreshToken", getClearCookieOptions(true));
+    res.clearCookie("refresh_token", getClearCookieOptions(true));
     throw new AppError("Invalid refresh session. Please sign in again.", 401);
   }
 
-  // 2. Replay / Reuse Detection: If already revoked, invalidate entire family!
+  // 2. Replay / Reuse Detection: If already revoked
   if (tokenRecord.revokedAt) {
+    const ROTATION_GRACE_PERIOD_MS = 30 * 1000; // 30-second leeway for parallel / concurrent requests
+    const timeSinceRevocation = Date.now() - new Date(tokenRecord.revokedAt).getTime();
+
+    // If within grace period and was legitimately replaced by a rotation successor,
+    // fulfill the request with a fresh access token without invalidating the token family
+    if (timeSinceRevocation < ROTATION_GRACE_PERIOD_MS && tokenRecord.replacedByTokenHash) {
+      const activeSuccessor = await RefreshToken.findOne({
+        familyId: tokenRecord.familyId,
+        revokedAt: null,
+      }).sort({ createdAt: -1 });
+
+      if (activeSuccessor && new Date(activeSuccessor.expiresAt) > new Date()) {
+        const user = await User.findById(tokenRecord.user).select("-passwordHash");
+        if (user) {
+          const accessToken = signAccessToken({
+            id: user._id,
+            email: user.email,
+            role: user.role,
+          });
+
+          res.cookie("accessToken", accessToken, getCookieOptions(false));
+          return res.status(200).json({
+            success: true,
+            message: "Session refreshed successfully.",
+            user: {
+              id: user._id,
+              name: user.name,
+              email: user.email,
+              role: user.role,
+            },
+          });
+        }
+      }
+    }
+
+    // Genuine reuse attack or outside grace period: Invalidate entire token family!
     await RefreshToken.updateMany(
       { familyId: tokenRecord.familyId },
       { revokedAt: new Date() }
     );
     res.clearCookie("accessToken", getClearCookieOptions(false));
+    res.clearCookie("access_token", getClearCookieOptions(false));
     res.clearCookie("refreshToken", getClearCookieOptions(true));
+    res.clearCookie("refresh_token", getClearCookieOptions(true));
     throw new AppError(
       "Session terminated due to suspected token reuse. Please sign in again.",
       401
@@ -178,7 +224,9 @@ export const refreshToken = async (req, res) => {
     tokenRecord.revokedAt = new Date();
     await tokenRecord.save();
     res.clearCookie("accessToken", getClearCookieOptions(false));
+    res.clearCookie("access_token", getClearCookieOptions(false));
     res.clearCookie("refreshToken", getClearCookieOptions(true));
+    res.clearCookie("refresh_token", getClearCookieOptions(true));
     throw new AppError("Session expired. Please sign in again.", 401);
   }
 
@@ -231,7 +279,11 @@ export const refreshToken = async (req, res) => {
  * POST /api/auth/logout
  */
 export const logout = async (req, res) => {
-  const rawToken = req.cookies?.refreshToken || req.body?.refreshToken;
+  const rawToken =
+    req.cookies?.refreshToken ||
+    req.cookies?.refresh_token ||
+    req.body?.refreshToken ||
+    req.body?.refresh_token;
 
   if (rawToken && typeof rawToken === "string") {
     try {
@@ -243,7 +295,9 @@ export const logout = async (req, res) => {
   }
 
   res.clearCookie("accessToken", getClearCookieOptions(false));
+  res.clearCookie("access_token", getClearCookieOptions(false));
   res.clearCookie("refreshToken", getClearCookieOptions(true));
+  res.clearCookie("refresh_token", getClearCookieOptions(true));
 
   res.status(200).json({
     success: true,

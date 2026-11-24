@@ -10,12 +10,16 @@ export const authenticate = async (req, res, next) => {
   try {
     let token = null;
 
-    // 1. Check HTTP-only cookie first
-    if (req.cookies && req.cookies.accessToken) {
-      token = req.cookies.accessToken;
+    // 1. Check HTTP-only cookie first (supporting both camelCase and snake_case)
+    if (req.cookies) {
+      if (req.cookies.accessToken) {
+        token = req.cookies.accessToken;
+      } else if (req.cookies.access_token) {
+        token = req.cookies.access_token;
+      }
     }
     // 2. Fall back to Authorization Bearer header
-    else if (req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
+    if (!token && req.headers.authorization && req.headers.authorization.startsWith("Bearer ")) {
       token = req.headers.authorization.slice(7).trim();
     }
 

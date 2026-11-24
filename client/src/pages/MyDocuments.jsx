@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from "react";
+import { useState, useEffect, useCallback, useRef } from "react";
 import { createPortal } from "react-dom";
 import {
   FolderLock,
@@ -20,27 +20,97 @@ import {
   ShieldCheck,
   ChevronLeft,
   ChevronRight,
+  MoreVertical,
+  Lock,
+  Calendar,
+  HardDrive,
+  FileCheck2,
 } from "lucide-react";
-import UploadModal, { getFileIcon } from "../components/UploadModal.jsx";
+import UploadModal from "../components/UploadModal.jsx";
+import { secureFetch } from "../utils/api.js";
 import "./MyDocuments.css";
 
 const FILE_TYPE_FILTERS = [
   { id: "all", label: "All Files" },
-  { id: "pdf", label: "PDFs" },
+  { id: "pdf", label: "PDF" },
   { id: "document", label: "Word" },
   { id: "spreadsheet", label: "Spreadsheets" },
   { id: "image", label: "Images" },
-  { id: "archive", label: "Archives (ZIP)" },
+  { id: "archive", label: "Archives" },
   { id: "text", label: "Text / Code" },
 ];
 
+/**
+ * Returns a short, clean uppercase extension badge (e.g., PDF, DOCX, XLSX, PNG, ZIP, TXT)
+ * Never displays raw MIME types.
+ */
+export const getFileExtensionBadge = (fileName = "", mimeType = "") => {
+  if (fileName && fileName.includes(".")) {
+    const ext = fileName.split(".").pop()?.trim().toUpperCase();
+    if (ext && ext.length >= 1 && ext.length <= 5) return ext;
+  }
+  if (mimeType) {
+    const lower = mimeType.toLowerCase();
+    if (lower.includes("pdf")) return "PDF";
+    if (lower.includes("word") || lower.includes("document")) return "DOCX";
+    if (lower.includes("sheet") || lower.includes("excel")) return "XLSX";
+    if (lower.includes("presentation") || lower.includes("powerpoint")) return "PPTX";
+    if (lower.includes("csv")) return "CSV";
+    if (lower.includes("png")) return "PNG";
+    if (lower.includes("jpeg") || lower.includes("jpg")) return "JPG";
+    if (lower.includes("zip")) return "ZIP";
+    if (lower.includes("text")) return "TXT";
+  }
+  return "FILE";
+};
+
+/**
+ * Returns human-friendly category label and badge styling variant
+ */
+export const getFileTypeInfo = (fileName = "", mimeType = "") => {
+  const ext = fileName.split(".").pop()?.toLowerCase() || "";
+  const mime = (mimeType || "").toLowerCase();
+
+  if (ext === "pdf" || mime.includes("pdf")) {
+    return { label: "PDF Document", variant: "pdf", Icon: FileText };
+  }
+  if (["doc", "docx"].includes(ext) || mime.includes("word")) {
+    return { label: "Word Document", variant: "word", Icon: FileText };
+  }
+  if (["xls", "xlsx", "csv"].includes(ext) || mime.includes("spreadsheet") || mime.includes("excel")) {
+    return { label: "Spreadsheet", variant: "excel", Icon: FileSpreadsheet };
+  }
+  if (["ppt", "pptx"].includes(ext) || mime.includes("presentation")) {
+    return { label: "Presentation", variant: "ppt", Icon: FileText };
+  }
+  if (["jpg", "jpeg", "png", "gif", "webp", "svg"].includes(ext) || mime.includes("image")) {
+    return { label: "Image", variant: "image", Icon: FileImage };
+  }
+  if (["zip", "rar", "7z", "tar", "gz"].includes(ext) || mime.includes("zip")) {
+    return { label: "Archive", variant: "archive", Icon: FileArchive };
+  }
+  if (["txt", "md", "json", "js", "html", "css", "py", "ts"].includes(ext) || mime.includes("text")) {
+    return { label: "Text / Code", variant: "code", Icon: FileCode };
+  }
+  return { label: "Document", variant: "default", Icon: FileText };
+};
+
 const formatDocumentDate = (dateString) => {
-  if (!dateString) return "Unknown";
+  if (!dateString) return "—";
   const date = new Date(dateString);
-  return date.toLocaleDateString(undefined, {
-    year: "numeric",
+  if (isNaN(date.getTime())) return "—";
+  return date.toLocaleDateString("en-US", {
     month: "short",
     day: "numeric",
+    year: "numeric",
+  });
+};
+
+const formatDocumentTime = (dateString) => {
+  if (!dateString) return "";
+  const date = new Date(dateString);
+  if (isNaN(date.getTime())) return "";
+  return date.toLocaleTimeString("en-US", {
     hour: "2-digit",
     minute: "2-digit",
   });
@@ -61,6 +131,29 @@ export default function MyDocuments() {
   const [downloadingId, setDownloadingId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
+  const [openMenuId, setOpenMenuId] = useState(null);
+
+  const searchInputRef = useRef(null);
+
+  // Close three-dot dropdown on click outside or escape
+  useEffect(() => {
+    const handleClickOutside = (e) => {
+      if (!e.target.closest(".doc-actions-cell") && !e.target.closest(".doc-mobile-actions")) {
+        setOpenMenuId(null);
+      }
+    };
+    const handleKeyDown = (e) => {
+      if (e.key === "Escape") {
+        setOpenMenuId(null);
+      }
+    };
+    document.addEventListener("mousedown", handleClickOutside);
+    document.addEventListener("keydown", handleKeyDown);
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+      document.removeEventListener("keydown", handleKeyDown);
+    };
+  }, []);
 
   // Fetch documents from backend API
   const fetchDocuments = useCallback(async () => {
@@ -81,9 +174,8 @@ export default function MyDocuments() {
         queryParams.append("type", selectedType);
       }
 
-      const res = await fetch(`/api/documents?${queryParams.toString()}`, {
+      const res = await secureFetch(`/api/documents?${queryParams.toString()}`, {
         method: "GET",
-        credentials: "include",
       });
 
       if (!res.ok) {
@@ -94,7 +186,7 @@ export default function MyDocuments() {
       const data = await res.json();
       setDocuments(data.documents || []);
       setPagination(
-        data.pagination || { total: data.count || 0, page, limit: 15, totalPages: 1 }
+        data.pagination || { total: data.count || (data.documents ? data.documents.length : 0), page, limit: 15, totalPages: 1 }
       );
     } catch (err) {
       setError(err.message || "Unable to connect to SecureVault server.");
@@ -109,16 +201,16 @@ export default function MyDocuments() {
 
   // Handle Download and In-Memory Decryption
   const handleDownload = async (doc) => {
-    if (downloadingId) return; // Prevent concurrent repeated clicks
+    if (downloadingId) return;
 
     try {
       setDownloadingId(doc.id);
+      setOpenMenuId(null);
       setError("");
       setSuccessMsg("");
 
-      const response = await fetch(`/api/documents/${doc.id}/download`, {
+      const response = await secureFetch(`/api/documents/${doc.id}/download`, {
         method: "GET",
-        credentials: "include",
       });
 
       if (!response.ok) {
@@ -157,7 +249,7 @@ export default function MyDocuments() {
       document.body.removeChild(tempLink);
       window.URL.revokeObjectURL(downloadUrl);
 
-      setSuccessMsg(`"${filename}" was decrypted and downloaded successfully.`);
+      setSuccessMsg(`"${filename}" decrypted and downloaded successfully.`);
       setTimeout(() => setSuccessMsg(""), 5000);
     } catch (err) {
       setError(err.message || "An unexpected error occurred during document download.");
@@ -175,9 +267,8 @@ export default function MyDocuments() {
       setError("");
       setSuccessMsg("");
 
-      const res = await fetch(`/api/documents/${deleteTarget.id}`, {
+      const res = await secureFetch(`/api/documents/${deleteTarget.id}`, {
         method: "DELETE",
-        credentials: "include",
       });
 
       const data = await res.json().catch(() => ({}));
@@ -206,16 +297,21 @@ export default function MyDocuments() {
         onClose={() => setIsUploadOpen(false)}
         onUploadSuccess={() => {
           fetchDocuments();
-          setSuccessMsg("Document encrypted and added to your vault.");
-          setTimeout(() => setSuccessMsg(""), 4000);
+          setSuccessMsg("Document encrypted with AES-256-GCM and stored in your vault.");
+          setTimeout(() => setSuccessMsg(""), 4500);
         }}
       />
 
-      {/* Page Header */}
+      {/* 2. Page Header */}
       <header className="docs-header">
         <div className="docs-header-copy">
-          <h1>My Documents</h1>
-          <p>End-to-end AES-256-GCM encrypted document vault.</p>
+          <div className="docs-header-title-row">
+            <div className="docs-header-icon-mark">
+              <FolderLock size={22} />
+            </div>
+            <h1>My Documents</h1>
+          </div>
+          <p>Secure document storage with AES-256-GCM encryption.</p>
         </div>
 
         <div className="docs-header-actions">
@@ -226,13 +322,13 @@ export default function MyDocuments() {
             disabled={loading}
             title="Refresh document list"
           >
-            <RefreshCw size={16} className={loading ? "docs-spinner" : ""} />
+            <RefreshCw size={15} className={loading ? "docs-spinner" : ""} />
             <span>Refresh</span>
           </button>
 
           <button
             type="button"
-            className="primary-button"
+            className="primary-button docs-upload-cta"
             onClick={() => setIsUploadOpen(true)}
             title="Upload and encrypt a new document"
           >
@@ -246,24 +342,33 @@ export default function MyDocuments() {
       {error && (
         <div className="docs-alert error" role="alert">
           <div className="docs-alert-inner">
-            <AlertCircle size={18} />
+            <AlertCircle size={18} className="alert-icon" />
             <span>{error}</span>
           </div>
-          <button
-            type="button"
-            className="docs-alert-close"
-            onClick={() => setError("")}
-            aria-label="Dismiss error"
-          >
-            <X size={16} />
-          </button>
+          <div className="docs-alert-actions">
+            <button
+              type="button"
+              className="docs-alert-retry"
+              onClick={fetchDocuments}
+            >
+              Retry
+            </button>
+            <button
+              type="button"
+              className="docs-alert-close"
+              onClick={() => setError("")}
+              aria-label="Dismiss error"
+            >
+              <X size={16} />
+            </button>
+          </div>
         </div>
       )}
 
       {successMsg && (
         <div className="docs-alert success" role="status">
           <div className="docs-alert-inner">
-            <CheckCircle2 size={18} />
+            <CheckCircle2 size={18} className="alert-icon" />
             <span>{successMsg}</span>
           </div>
           <button
@@ -277,14 +382,15 @@ export default function MyDocuments() {
         </div>
       )}
 
-      {/* Search and Filters */}
+      {/* 4. Search and Filters Toolbar */}
       <section className="docs-toolbar">
         <div className="docs-search-wrapper">
-          <Search size={17} className="docs-search-icon" />
+          <Search size={16} className="docs-search-icon" />
           <input
+            ref={searchInputRef}
             type="text"
             className="docs-search-input"
-            placeholder="Search documents by name..."
+            placeholder="Search documents by filename..."
             value={search}
             onChange={(e) => {
               setSearch(e.target.value);
@@ -296,34 +402,40 @@ export default function MyDocuments() {
               type="button"
               className="docs-search-clear"
               onClick={() => {
-                setSearch(e.target.value);
+                setSearch("");
                 setPage(1);
+                searchInputRef.current?.focus();
               }}
               aria-label="Clear search"
             >
-              <X size={15} />
+              <X size={14} />
             </button>
           )}
         </div>
 
-        <div className="docs-filter-group" role="tablist">
-          {FILE_TYPE_FILTERS.map((filter) => (
-            <button
-              key={filter.id}
-              type="button"
-              className={`docs-filter-btn ${selectedType === filter.id ? "active" : ""}`}
-              onClick={() => {
-                setSelectedType(filter.id);
-                setPage(1);
-              }}
-            >
-              {filter.label}
-            </button>
-          ))}
+        <div className="docs-filter-scroller" role="tablist">
+          {FILE_TYPE_FILTERS.map((filter) => {
+            const isActive = selectedType === filter.id;
+            return (
+              <button
+                key={filter.id}
+                type="button"
+                role="tab"
+                aria-selected={isActive}
+                className={`docs-filter-btn ${isActive ? "active" : ""}`}
+                onClick={() => {
+                  setSelectedType(filter.id);
+                  setPage(1);
+                }}
+              >
+                {filter.label}
+              </button>
+            );
+          })}
         </div>
       </section>
 
-      {/* Main Table / Grid View */}
+      {/* 5. Document Presentation: Modern Table + Mobile Cards */}
       <div className="docs-table-card">
         {loading && documents.length === 0 ? (
           <div className="docs-state-card">
@@ -331,18 +443,18 @@ export default function MyDocuments() {
               <Loader2 size={32} className="docs-spinner" />
             </div>
             <h3>Loading documents...</h3>
-            <p>Retrieving your encrypted vault records securely.</p>
+            <p>Accessing your encrypted vault records securely.</p>
           </div>
         ) : documents.length === 0 ? (
           <div className="docs-state-card">
-            <div className="docs-state-icon">
-              <FolderLock size={32} />
+            <div className="docs-state-icon empty">
+              <FolderLock size={34} />
             </div>
             <h3>No documents found</h3>
             <p>
               {search || selectedType !== "all"
-                ? "No stored documents match your search criteria. Try clearing filters."
-                : "You have not uploaded any documents yet. Get started by uploading your first encrypted file."}
+                ? "No stored documents match your search or filter criteria. Try adjusting your search term."
+                : "You haven't uploaded any documents to your secure vault yet."}
             </p>
             {search || selectedType !== "all" ? (
               <button
@@ -363,95 +475,155 @@ export default function MyDocuments() {
                 onClick={() => setIsUploadOpen(true)}
               >
                 <CloudUpload size={17} />
-                <span>Upload Document</span>
+                <span>Upload First Document</span>
               </button>
             )}
           </div>
         ) : (
           <>
-            <div className="docs-table-container">
+            {/* Desktop / Tablet Table View */}
+            <div className="docs-table-wrapper">
               <table className="docs-table">
                 <thead>
                   <tr>
-                    <th>Document Name</th>
-                    <th>File Format</th>
-                    <th>Size</th>
-                    <th>Upload Date</th>
-                    <th>Security Status</th>
-                    <th style={{ textAlign: "right" }}>Actions</th>
+                    <th className="th-doc">Document</th>
+                    <th className="th-format">Format</th>
+                    <th className="th-size">Size</th>
+                    <th className="th-date">Upload Date</th>
+                    <th className="th-security">Security</th>
+                    <th className="th-actions">Actions</th>
                   </tr>
                 </thead>
                 <tbody>
                   {documents.map((doc) => {
-                    const DocIcon = getFileIcon(doc.mimeType, doc.originalName);
+                    const extBadge = getFileExtensionBadge(doc.originalName, doc.mimeType);
+                    const typeInfo = getFileTypeInfo(doc.originalName, doc.mimeType);
+                    const FileIcon = typeInfo.Icon;
                     const isDownloadingThis = downloadingId === doc.id;
+                    const isMenuOpen = openMenuId === doc.id;
 
                     return (
-                      <tr key={doc.id}>
-                        <td>
-                          <div className="doc-name-cell">
-                            <div className="doc-type-icon">
-                              <DocIcon size={20} />
+                      <tr key={doc.id} className={isDownloadingThis ? "row-downloading" : ""}>
+                        {/* 1. File icon + Original Filename + Extension Badge */}
+                        <td className="td-doc">
+                          <div className="doc-item-cell">
+                            <div className={`doc-icon-badge ${typeInfo.variant}`}>
+                              <FileIcon size={20} />
                             </div>
-                            <div className="doc-name-meta">
-                              <span className="doc-title" title={doc.originalName}>
-                                {doc.originalName}
+                            <div className="doc-item-info">
+                              <div className="doc-title-row">
+                                <span className="doc-item-name" title={doc.originalName}>
+                                  {doc.originalName}
+                                </span>
+                                <span className={`doc-ext-badge ${typeInfo.variant}`}>
+                                  {extBadge}
+                                </span>
+                              </div>
+                              <span className="doc-mobile-meta-sub">
+                                {doc.formattedSize || "0 B"} • {formatDocumentDate(doc.createdAt)}
                               </span>
-                              <span className="doc-sub">AES-256-GCM Encrypted</span>
                             </div>
                           </div>
                         </td>
-                        <td>
-                          <span style={{ textTransform: "uppercase", fontSize: "12px", color: "var(--muted)" }}>
-                            {doc.mimeType?.split("/")[1] || "File"}
+
+                        {/* 2. Format Category (never raw MIME) */}
+                        <td className="td-format">
+                          <span className="doc-format-label">
+                            {typeInfo.label}
                           </span>
                         </td>
-                        <td>
-                          <strong>{doc.formattedSize || "0 B"}</strong>
-                        </td>
-                        <td>
-                          <span style={{ color: "var(--muted)", fontSize: "12.5px" }}>
-                            {formatDocumentDate(doc.createdAt)}
+
+                        {/* 3. Human-readable file size */}
+                        <td className="td-size">
+                          <span className="doc-size-text">
+                            {doc.formattedSize || "0 B"}
                           </span>
                         </td>
-                        <td>
-                          <span className="doc-status-badge">
-                            <span className="status-dot" />
-                            {doc.status || "ACTIVE"}
+
+                        {/* 4. Upload Date */}
+                        <td className="td-date">
+                          <div className="doc-date-cell">
+                            <span className="doc-date-main">
+                              {formatDocumentDate(doc.createdAt)}
+                            </span>
+                            <span className="doc-time-sub">
+                              {formatDocumentTime(doc.createdAt)}
+                            </span>
+                          </div>
+                        </td>
+
+                        {/* 5. Encrypted Security Status */}
+                        <td className="td-security">
+                          <span
+                            className="doc-security-badge"
+                            title="Encrypted in-memory with AES-256-GCM. Supabase receives ciphertext only."
+                          >
+                            <ShieldCheck size={13} className="security-icon" />
+                            <span>AES-256-GCM</span>
                           </span>
                         </td>
-                        <td>
+
+                        {/* 6. Document Actions Menu */}
+                        <td className="td-actions">
                           <div className="doc-actions-cell">
+                            {/* Direct Download Quick Button on Desktop */}
                             <button
                               type="button"
-                              className="doc-download-btn"
+                              className="doc-quick-action-btn download"
                               onClick={() => handleDownload(doc)}
                               disabled={downloadingId !== null || isDeleting}
-                              title="Decrypt and download this document"
+                              title="Decrypt and download file"
+                              aria-label={`Download ${doc.originalName}`}
                             >
                               {isDownloadingThis ? (
-                                <>
-                                  <Loader2 size={15} className="docs-spinner" />
-                                  <span>Decrypting...</span>
-                                </>
+                                <Loader2 size={15} className="docs-spinner" />
                               ) : (
-                                <>
-                                  <Download size={15} />
-                                  <span>Download</span>
-                                </>
+                                <Download size={15} />
                               )}
                             </button>
 
-                            <button
-                              type="button"
-                              className="doc-delete-btn"
-                              onClick={() => setDeleteTarget(doc)}
-                              disabled={downloadingId !== null || isDeleting}
-                              title="Permanently delete this document"
-                              aria-label={`Delete ${doc.originalName}`}
-                            >
-                              <Trash2 size={15} />
-                            </button>
+                            {/* Three-Dot Dropdown Menu */}
+                            <div className="doc-menu-wrapper">
+                              <button
+                                type="button"
+                                className={`doc-menu-trigger ${isMenuOpen ? "active" : ""}`}
+                                onClick={() => setOpenMenuId(isMenuOpen ? null : doc.id)}
+                                aria-label="More document options"
+                                aria-expanded={isMenuOpen}
+                                title="More options"
+                              >
+                                <MoreVertical size={16} />
+                              </button>
+
+                              {isMenuOpen && (
+                                <div className="doc-actions-dropdown" role="menu">
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="dropdown-item"
+                                    onClick={() => handleDownload(doc)}
+                                    disabled={downloadingId !== null || isDeleting}
+                                  >
+                                    <Download size={15} />
+                                    <span>Download &amp; Decrypt</span>
+                                  </button>
+                                  <div className="dropdown-divider" />
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="dropdown-item danger"
+                                    onClick={() => {
+                                      setOpenMenuId(null);
+                                      setDeleteTarget(doc);
+                                    }}
+                                    disabled={downloadingId !== null || isDeleting}
+                                  >
+                                    <Trash2 size={15} />
+                                    <span>Delete Document</span>
+                                  </button>
+                                </div>
+                              )}
+                            </div>
                           </div>
                         </td>
                       </tr>
@@ -461,11 +633,130 @@ export default function MyDocuments() {
               </table>
             </div>
 
+            {/* Mobile Document Cards View (shown on <= 768px screens) */}
+            <div className="docs-mobile-cards">
+              {documents.map((doc) => {
+                const extBadge = getFileExtensionBadge(doc.originalName, doc.mimeType);
+                const typeInfo = getFileTypeInfo(doc.originalName, doc.mimeType);
+                const FileIcon = typeInfo.Icon;
+                const isDownloadingThis = downloadingId === doc.id;
+                const isMenuOpen = openMenuId === doc.id;
+
+                return (
+                  <div key={doc.id} className="doc-mobile-card">
+                    <div className="doc-mobile-header">
+                      <div className={`doc-icon-badge ${typeInfo.variant}`}>
+                        <FileIcon size={20} />
+                      </div>
+                      <div className="doc-mobile-title-col">
+                        <div className="doc-title-row">
+                          <span className="doc-item-name" title={doc.originalName}>
+                            {doc.originalName}
+                          </span>
+                          <span className={`doc-ext-badge ${typeInfo.variant}`}>
+                            {extBadge}
+                          </span>
+                        </div>
+                        <span className="doc-format-label">{typeInfo.label}</span>
+                      </div>
+
+                      {/* Mobile Three-Dot Menu */}
+                      <div className="doc-menu-wrapper">
+                        <button
+                          type="button"
+                          className={`doc-menu-trigger ${isMenuOpen ? "active" : ""}`}
+                          onClick={() => setOpenMenuId(isMenuOpen ? null : doc.id)}
+                          aria-label="Document options"
+                        >
+                          <MoreVertical size={16} />
+                        </button>
+                        {isMenuOpen && (
+                          <div className="doc-actions-dropdown" role="menu">
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="dropdown-item"
+                              onClick={() => handleDownload(doc)}
+                              disabled={downloadingId !== null || isDeleting}
+                            >
+                              <Download size={15} />
+                              <span>Download &amp; Decrypt</span>
+                            </button>
+                            <div className="dropdown-divider" />
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="dropdown-item danger"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                setDeleteTarget(doc);
+                              }}
+                              disabled={downloadingId !== null || isDeleting}
+                            >
+                              <Trash2 size={15} />
+                              <span>Delete Document</span>
+                            </button>
+                          </div>
+                        )}
+                      </div>
+                    </div>
+
+                    <div className="doc-mobile-metadata">
+                      <div className="meta-pill">
+                        <HardDrive size={13} />
+                        <span>{doc.formattedSize || "0 B"}</span>
+                      </div>
+                      <div className="meta-pill">
+                        <Calendar size={13} />
+                        <span>{formatDocumentDate(doc.createdAt)}</span>
+                      </div>
+                      <div className="meta-pill security">
+                        <ShieldCheck size={13} />
+                        <span>AES-256-GCM</span>
+                      </div>
+                    </div>
+
+                    <div className="doc-mobile-actions">
+                      <button
+                        type="button"
+                        className="mobile-action-btn download"
+                        onClick={() => handleDownload(doc)}
+                        disabled={downloadingId !== null || isDeleting}
+                      >
+                        {isDownloadingThis ? (
+                          <>
+                            <Loader2 size={15} className="docs-spinner" />
+                            <span>Decrypting...</span>
+                          </>
+                        ) : (
+                          <>
+                            <Download size={15} />
+                            <span>Download</span>
+                          </>
+                        )}
+                      </button>
+
+                      <button
+                        type="button"
+                        className="mobile-action-btn delete"
+                        onClick={() => setDeleteTarget(doc)}
+                        disabled={downloadingId !== null || isDeleting}
+                        aria-label="Delete document"
+                      >
+                        <Trash2 size={15} />
+                        <span>Delete</span>
+                      </button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
             {/* Pagination Controls */}
             {pagination.totalPages > 1 && (
               <div className="docs-pagination">
-                <span>
-                  Showing {documents.length} of {pagination.total} documents
+                <span className="pagination-count-label">
+                  Showing <strong>{documents.length}</strong> of <strong>{pagination.total}</strong> documents
                 </span>
                 <div className="docs-pagination-btns">
                   <button
@@ -497,7 +788,8 @@ export default function MyDocuments() {
           </>
         )}
       </div>
-      {/* Delete Confirmation Modal */}
+
+      {/* 6. Delete Confirmation Modal */}
       {deleteTarget &&
         createPortal(
           <div
@@ -516,21 +808,27 @@ export default function MyDocuments() {
                 </div>
                 <div className="delete-modal-header-copy">
                   <h3 id="delete-dialog-title">Delete Encrypted Document</h3>
-                  <p>Permanent Zero-Knowledge Purge</p>
+                  <p>Permanent Zero-Knowledge Storage Purge</p>
                 </div>
               </div>
 
               <div className="delete-modal-file-box">
-                <span className="delete-modal-file-name" title={deleteTarget.originalName}>
-                  {deleteTarget.originalName}
-                </span>
-                <span className="delete-modal-file-size">
-                  {deleteTarget.formattedSize}
-                </span>
+                <div className="delete-file-row">
+                  <span className="delete-modal-file-name" title={deleteTarget.originalName}>
+                    {deleteTarget.originalName}
+                  </span>
+                  <span className="delete-modal-file-size">
+                    {deleteTarget.formattedSize}
+                  </span>
+                </div>
+                <div className="delete-file-security-note">
+                  <Lock size={12} />
+                  <span>Ciphertext in Supabase Storage will be purged permanently.</span>
+                </div>
               </div>
 
               <div className="delete-warning-callout">
-                <strong>Warning:</strong> This document will be permanently deleted from the database and its ciphertext completely purged from private cloud storage. This operation cannot be undone.
+                <strong>Irreversible Action:</strong> This document and its encrypted storage object will be permanently removed. Neither the ciphertext nor the metadata can be recovered.
               </div>
 
               <div className="delete-modal-actions">
