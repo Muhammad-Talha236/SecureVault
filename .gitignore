@@ -1,0 +1,83 @@
+# ---------- OS files ----------
+.DS_Store
+Thumbs.db
+desktop.ini
+ehthumbs.db
+
+# ---------- Editors / IDEs ----------
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+*.sublime-workspace
+
+# ---------- Environment & secrets ----------
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+secrets.json
+
+# ---------- Logs & temp files ----------
+*.log
+logs/
+tmp/
+temp/
+*.tmp
+*.bak
+
+# ---------- Dependencies ----------
+node_modules/
+vendor/
+bower_components/
+
+# ---------- Build output ----------
+dist/
+build/
+out/
+.next/
+.nuxt/
+target/
+bin/
+obj/
+
+# ---------- Python ----------
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+env/
+.pytest_cache/
+.mypy_cache/
+.ipynb_checkpoints/
+
+# ---------- Node / JS tooling ----------
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+.npm/
+.eslintcache
+.parcel-cache/
+
+# ---------- Java / Gradle / Maven ----------
+.gradle/
+*.class
+*.jar
+*.war
+
+# ---------- Coverage & test reports ----------
+coverage/
+.nyc_output/
+htmlcov/
+.coverage
+
+# ---------- Databases & local data ----------
+*.sqlite
+*.sqlite3
+*.db
+
+# ---------- Docker ----------
+docker-compose.override.yml
