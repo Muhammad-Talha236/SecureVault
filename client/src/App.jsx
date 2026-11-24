@@ -2,6 +2,9 @@ import { Navigate, Route, Routes } from "react-router-dom";
 import Shell from "./components/Shell.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
 import MyDocuments from "./pages/MyDocuments.jsx";
+import AdminUsers from "./pages/AdminUsers.jsx";
+import AdminDocuments from "./pages/AdminDocuments.jsx";
+import AdminRoles from "./pages/AdminRoles.jsx";
 import Placeholder from "./pages/Placeholder.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
@@ -31,14 +34,13 @@ function RootRedirect() {
 function AppRoutes() {
   const { theme, toggleTheme } = useTheme();
 
-  const admin = [
-    ["users", "User Management"],
-    ["roles", "Roles & Permissions"],
-    ["documents", "Document Records"],
+  // Assigned to Laiba (Audit & Security Events)
+  const remainingAdminModules = [
     ["audit-logs", "Audit Logs"],
     ["security-events", "Security Events"],
   ];
 
+  // Assigned to Faiza (Document Sharing)
   const userPlaceholders = [
     ["shared", "Shared With Me"],
     ["activity", "My Activity"],
@@ -60,7 +62,13 @@ function AppRoutes() {
         }
       >
         <Route index element={<Dashboard audience="Admin" />} />
-        {admin.map(([path, title]) => (
+        {/* Talha's Completed Admin Modules */}
+        <Route path="users" element={<AdminUsers />} />
+        <Route path="documents" element={<AdminDocuments />} />
+        <Route path="roles" element={<AdminRoles />} />
+
+        {/* Laiba's Modules */}
+        {remainingAdminModules.map(([path, title]) => (
           <Route key={path} path={path} element={<Placeholder title={title} />} />
         ))}
       </Route>
