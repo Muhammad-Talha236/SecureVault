@@ -1,4 +1,5 @@
-import { NavLink, Outlet } from "react-router-dom";
+import { useEffect, useRef, useState } from "react";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import {
   Activity,
   Bell,
@@ -12,15 +13,59 @@ import {
   ShieldCheck,
   Sun,
   Users,
-  Settings,
-  Star,
   ChevronDown,
   Search,
-  Upload,
+  LogOut,
+  User as UserIcon,
 } from "lucide-react";
+import { useAuth } from "../context/AuthContext.jsx";
 
 export default function Shell({ audience, theme, toggleTheme }) {
   const isAdmin = audience === "Admin";
+  const location = useLocation();
+  const navigate = useNavigate();
+  const pageContentRef = useRef(null);
+  const profileMenuRef = useRef(null);
+
+  const { user, logout } = useAuth();
+  const [profileOpen, setProfileOpen] = useState(false);
+
+  useEffect(() => {
+    if (pageContentRef.current) {
+      pageContentRef.current.scrollTop = 0;
+    }
+  }, [location.pathname]);
+
+  // Close profile menu when clicking outside
+  useEffect(() => {
+    const handleOutsideClick = (e) => {
+      if (profileMenuRef.current && !profileMenuRef.current.contains(e.target)) {
+        setProfileOpen(false);
+      }
+    };
+    if (profileOpen) {
+      document.addEventListener("mousedown", handleOutsideClick);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleOutsideClick);
+    };
+  }, [profileOpen]);
+
+  const handleLogout = async () => {
+    await logout();
+    navigate("/login", { replace: true });
+  };
+
+  const getInitials = (name) => {
+    if (!name) return isAdmin ? "AD" : "US";
+    const parts = name.trim().split(/\s+/);
+    if (parts.length === 1) return parts[0].slice(0, 2).toUpperCase();
+    return (parts[0][0] + parts[parts.length - 1][0]).toUpperCase();
+  };
+
+  const initials = getInitials(user?.name);
+  const displayName = user?.name || (isAdmin ? "Administrator" : "User");
+  const displayRole = user?.role === "ADMIN" ? "Administrator" : "Standard User";
 
   const adminItems = [
     ["/admin", "Dashboard", LayoutDashboard, true],
@@ -74,31 +119,52 @@ export default function Shell({ audience, theme, toggleTheme }) {
           </nav>
         </div>
 
-        <div className="sidebar-promo">
-          <div className="promo-icon">
-            <ShieldCheck size={25} />
+        <div className="sidebar-profile-container" ref={profileMenuRef}>
+          <div
+            className={`sidebar-profile ${profileOpen ? "active" : ""}`}
+            onClick={() => setProfileOpen(!profileOpen)}
+            role="button"
+            tabIndex={0}
+            aria-haspopup="true"
+            aria-expanded={profileOpen}
+            onKeyDown={(e) => {
+              if (e.key === "Enter" || e.key === " ") {
+                e.preventDefault();
+                setProfileOpen(!profileOpen);
+              }
+            }}
+          >
+            <div className="profile-avatar">{initials}</div>
+
+            <div className="profile-info">
+              <strong>{displayName}</strong>
+              <span>{displayRole}</span>
+            </div>
+
+            <ChevronDown
+              size={17}
+              className={`profile-chevron ${profileOpen ? "rotated" : ""}`}
+            />
           </div>
 
-          <h3>Your files.<br />Our priority.</h3>
-          <p>Secure, private and organized document management.</p>
-
-          <div className="promo-footer">
-            <LockKeyhole size={14} />
-            <span>Protected workspace</span>
-          </div>
-        </div>
-
-        <div className="sidebar-profile">
-          <div className="profile-avatar">
-            {isAdmin ? "AD" : "JD"}
-          </div>
-
-          <div className="profile-info">
-            <strong>{isAdmin ? "Admin User" : "John Doe"}</strong>
-            <span>{audience}</span>
-          </div>
-
-          <ChevronDown size={17} className="profile-chevron" />
+          {profileOpen && (
+            <div className="profile-dropdown">
+              <div className="profile-dropdown-header">
+                <p className="dropdown-user-name">{displayName}</p>
+                <p className="dropdown-user-email">{user?.email || "No email available"}</p>
+                <span className="dropdown-role-badge">{user?.role || "USER"}</span>
+              </div>
+              <div className="profile-dropdown-divider" />
+              <button
+                type="button"
+                className="dropdown-item logout-btn"
+                onClick={handleLogout}
+              >
+                <LogOut size={16} />
+                <span>Sign Out</span>
+              </button>
+            </div>
+          )}
         </div>
       </aside>
 
@@ -131,16 +197,19 @@ export default function Shell({ audience, theme, toggleTheme }) {
               title="Notifications"
             >
               <Bell size={19} />
-              <span className="notification-dot">3</span>
             </button>
 
-            <button className="topbar-avatar" title="Profile">
-              {isAdmin ? "AD" : "JD"}
+            <button
+              className="topbar-avatar"
+              title={`${displayName} (${displayRole}) - Click to sign out`}
+              onClick={handleLogout}
+            >
+              {initials}
             </button>
           </div>
         </header>
 
-        <main className="page-content">
+        <main className="page-content" ref={pageContentRef}>
           <Outlet />
         </main>
       </div>

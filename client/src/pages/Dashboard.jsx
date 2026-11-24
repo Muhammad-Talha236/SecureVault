@@ -1,156 +1,52 @@
 import {
   Activity,
   ArrowRight,
-  ArrowUpRight,
   CheckCircle2,
   CloudUpload,
   Database,
-  FileArchive,
-  FileImage,
-  FileSpreadsheet,
   FileText,
   Folder,
   FolderPlus,
   HardDrive,
   LockKeyhole,
-  MoreHorizontal,
   Share2,
   ShieldCheck,
   Star,
   Users,
   Clock3,
 } from "lucide-react";
-
-const adminStats = [
-  { label: "Total Users", value: "1,248", change: "+12%", Icon: Users },
-  { label: "Total Documents", value: "356", change: "+8%", Icon: FileText },
-  { label: "Storage Used", value: "72%", change: null, Icon: Database },
-  { label: "Security Events", value: "24", change: "+5%", Icon: ShieldCheck },
-];
-
-const userStats = [
-  { label: "My Documents", value: "1,248", change: "+12%", Icon: FileText },
-  { label: "Shared Files", value: "356", change: "+8%", Icon: Share2 },
-  { label: "Storage Used", value: "72%", change: null, Icon: Database },
-  { label: "Favorites", value: "24", change: "+5%", Icon: Star },
-];
-
-const recentFiles = [
-  { name: "Project Proposal.pdf", size: "2.4 MB", time: "2 hours ago", type: "pdf", Icon: FileText },
-  { name: "Meeting Notes.docx", size: "1.1 MB", time: "3 hours ago", type: "doc", Icon: FileText },
-  { name: "Design Assets.zip", size: "12.8 MB", time: "5 hours ago", type: "zip", Icon: FileArchive },
-  { name: "Banner.png", size: "856 KB", time: "1 day ago", type: "image", Icon: FileImage },
-];
-
-const activities = [
-  { title: "You uploaded Project Proposal.pdf", time: "2 hours ago", Icon: CloudUpload, type: "upload" },
-  { title: "A document was shared with Sarah", time: "3 hours ago", Icon: Share2, type: "share" },
-  { title: "Security check completed", time: "5 hours ago", Icon: ShieldCheck, type: "secure" },
-];
-
-function StorageChart() {
-  return (
-    <div className="storage-chart">
-      <div className="donut-chart">
-        <div className="donut-center">
-          <strong>72%</strong>
-          <span>Used</span>
-        </div>
-      </div>
-
-      <div className="storage-legend">
-        <div>
-          <i className="legend-dot used" />
-          <span>Used Space</span>
-          <strong>72 GB</strong>
-        </div>
-        <div>
-          <i className="legend-dot free" />
-          <span>Free Space</span>
-          <strong>28 GB</strong>
-        </div>
-        <div>
-          <i className="legend-dot total" />
-          <span>Total Space</span>
-          <strong>100 GB</strong>
-        </div>
-      </div>
-    </div>
-  );
-}
-
-function ActivityChart() {
-  return (
-    <div className="activity-chart">
-      <div className="chart-y-labels">
-        <span>15 GB</span>
-        <span>10 GB</span>
-        <span>5 GB</span>
-        <span>0 GB</span>
-      </div>
-
-      <svg
-        className="chart-svg"
-        viewBox="0 0 600 190"
-        preserveAspectRatio="none"
-        role="img"
-        aria-label="Illustrative storage usage chart"
-      >
-        <defs>
-          <linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="#398BFF" stopOpacity=".32" />
-            <stop offset="100%" stopColor="#398BFF" stopOpacity="0" />
-          </linearGradient>
-        </defs>
-
-        {[25, 70, 115, 160].map((y) => (
-          <line
-            key={y}
-            x1="0"
-            y1={y}
-            x2="600"
-            y2={y}
-            className="chart-grid-line"
-          />
-        ))}
-
-        <path
-          d="M0 135 C55 125 65 92 120 98 S190 118 240 88 S310 75 360 91 S440 52 490 60 S550 48 600 27 L600 165 L0 165 Z"
-          fill="url(#chartFill)"
-        />
-
-        <path
-          d="M0 135 C55 125 65 92 120 98 S190 118 240 88 S310 75 360 91 S440 52 490 60 S550 48 600 27"
-          className="chart-line"
-        />
-
-        {[
-          [0, 135], [120, 98], [240, 88],
-          [360, 91], [490, 60], [600, 27],
-        ].map(([x, y]) => (
-          <circle key={`${x}-${y}`} cx={x} cy={y} r="4" className="chart-point" />
-        ))}
-      </svg>
-
-      <div className="chart-x-labels">
-        <span>Jan</span>
-        <span>Feb</span>
-        <span>Mar</span>
-        <span>Apr</span>
-        <span>May</span>
-        <span>Jun</span>
-      </div>
-    </div>
-  );
-}
+import { useAuth } from "../context/AuthContext.jsx";
 
 export default function Dashboard({ audience }) {
   const isAdmin = audience === "Admin";
-  const stats = isAdmin ? adminStats : userStats;
+  const { user } = useAuth();
+
+  // Metrics configured with neutral empty state ("--") ready for API integration
+  const adminMetrics = [
+    { label: "Total Users", value: "--", Icon: Users },
+    { label: "Total Documents", value: "--", Icon: FileText },
+    { label: "Storage Used", value: "--", Icon: Database },
+    { label: "Security Events", value: "--", Icon: ShieldCheck },
+  ];
+
+  const userMetrics = [
+    { label: "My Documents", value: "--", Icon: FileText },
+    { label: "Shared Files", value: "--", Icon: Share2 },
+    { label: "Storage Used", value: "--", Icon: Database },
+    { label: "Favorites", value: "--", Icon: Star },
+  ];
+
+  const stats = isAdmin ? adminMetrics : userMetrics;
+
+  // Real data state placeholders (empty arrays ready for future backend fetching)
+  const recentFiles = [];
+  const activities = [];
+
+  const displayName = user?.name || (isAdmin ? "Administrator" : "User");
 
   return (
     <div className="dashboard">
-      {/* Welcome banner */}
+      {/* Welcome banner with authenticated user's actual profile */}
       <section className="hero-banner">
         <div className="hero-content">
           <div className="hero-tag">
@@ -158,15 +54,15 @@ export default function Dashboard({ audience }) {
             {audience.toUpperCase()} WORKSPACE
           </div>
 
-          <h1>
-            Welcome back, {isAdmin ? "Admin" : "John"}!
-          </h1>
+          <h1>Welcome back, {displayName}!</h1>
 
-          <p>
-            Manage your documents securely and efficiently.
-          </p>
+          <p>Manage your documents securely and efficiently.</p>
 
-          <button className="primary-button" disabled title="Upload functionality will be added later">
+          <button
+            className="primary-button"
+            disabled
+            title="Upload functionality will be available in the document management module"
+          >
             <CloudUpload size={18} />
             Upload Document
             <ArrowRight size={17} />
@@ -202,9 +98,9 @@ export default function Dashboard({ audience }) {
         </div>
       </section>
 
-      {/* Metric cards */}
+      {/* Metric cards with neutral empty states */}
       <section className="metric-grid">
-        {stats.map(({ label, value, change, Icon }, index) => (
+        {stats.map(({ label, value, Icon }, index) => (
           <article className="metric-card" key={label}>
             <div className={`metric-icon metric-icon-${index + 1}`}>
               <Icon size={22} />
@@ -212,72 +108,67 @@ export default function Dashboard({ audience }) {
 
             <div className="metric-info">
               <span>{label}</span>
-              <strong>{value}</strong>
+              <strong className="metric-empty">{value}</strong>
             </div>
 
-            {change && (
-              <span className="metric-change">
-                <ArrowUpRight size={13} />
-                {change}
-              </span>
-            )}
-
-            {index === 2 && (
-              <div className="metric-progress">
-                <span style={{ width: "72%" }} />
-              </div>
-            )}
+            <span className="metric-na">No data</span>
           </article>
         ))}
       </section>
 
-      {/* Main dashboard panels */}
+      {/* Main dashboard panels with empty states */}
       <section className="dashboard-grid">
+        {/* Storage Overview */}
         <article className="dashboard-card storage-panel">
           <div className="card-heading">
             <div>
-              <h2><Database size={18} /> Storage Overview</h2>
-              <p>Understand your storage usage</p>
+              <h2>
+                <Database size={18} /> Storage Overview
+              </h2>
+              <p>System storage telemetry and capacity</p>
             </div>
-            <button className="text-action" disabled>
-              Last 6 Months <MoreHorizontal size={18} />
-            </button>
           </div>
 
-          <StorageChart />
+          <div className="dashboard-empty-state">
+            <div className="empty-state-icon">
+              <HardDrive size={24} />
+            </div>
+            <h3>No storage data available</h3>
+            <p>
+              {isAdmin
+                ? "Storage information will appear when documents are uploaded across the platform."
+                : "Storage information will appear when documents are uploaded."}
+            </p>
+          </div>
         </article>
 
+        {/* Recent Files */}
         <article className="dashboard-card recent-panel">
           <div className="card-heading">
             <div>
-              <h2><Clock3 size={18} /> Recent Files</h2>
-              <p>Your recently accessed documents</p>
+              <h2>
+                <Clock3 size={18} /> Recent Files
+              </h2>
+              <p>Recently accessed and modified documents</p>
             </div>
-            <button className="text-action" disabled>
-              View All <ArrowRight size={15} />
-            </button>
           </div>
 
-          <div className="recent-file-list">
-            {recentFiles.map((file) => (
-              <div className="recent-file" key={file.name}>
-                <div className={`file-type-icon ${file.type}`}>
-                  <file.Icon size={20} />
-                </div>
-
-                <div className="file-details">
-                  <strong>{file.name}</strong>
-                  <span>{file.size} <i /> {file.time}</span>
-                </div>
-
-                <button className="more-button" aria-label={`More options for ${file.name}`}>
-                  <MoreHorizontal size={18} />
-                </button>
+          {recentFiles.length > 0 ? (
+            <div className="recent-file-list">
+              {/* Ready for real document integration */}
+            </div>
+          ) : (
+            <div className="dashboard-empty-state">
+              <div className="empty-state-icon">
+                <FileText size={24} />
               </div>
-            ))}
-          </div>
+              <h3>No documents uploaded yet</h3>
+              <p>Your recent documents will appear here.</p>
+            </div>
+          )}
         </article>
 
+        {/* Security Overview Banner */}
         <article className="security-card">
           <div className="security-art">
             <div className="security-ring" />
@@ -295,7 +186,11 @@ export default function Dashboard({ audience }) {
             <p>Your documents deserve a secure place.</p>
           </div>
 
-          <button className="security-link" disabled>
+          <button
+            className="security-link"
+            disabled
+            title="Security details will be integrated in upcoming security module"
+          >
             Security details <ArrowRight size={15} />
           </button>
         </article>
@@ -303,10 +198,13 @@ export default function Dashboard({ audience }) {
 
       {/* Bottom section */}
       <section className="bottom-grid">
+        {/* Quick Actions */}
         <article className="dashboard-card quick-actions">
           <div className="card-heading">
             <div>
-              <h2><Activity size={18} /> Quick Actions</h2>
+              <h2>
+                <Activity size={18} /> Quick Actions
+              </h2>
               <p>Common workspace actions</p>
             </div>
           </div>
@@ -318,40 +216,48 @@ export default function Dashboard({ audience }) {
               [Share2, "Share Files"],
               [Star, "View Favorites"],
             ].map(([Icon, label]) => (
-              <button className="quick-action" key={label} disabled title="This feature will be implemented later">
-                <span><Icon size={21} /></span>
+              <button
+                className="quick-action"
+                key={label}
+                disabled
+                title="This action will be enabled in upcoming modules"
+              >
+                <span>
+                  <Icon size={21} />
+                </span>
                 <strong>{label}</strong>
               </button>
             ))}
           </div>
         </article>
 
+        {/* Activity Feed */}
         <article className="dashboard-card activity-panel">
           <div className="card-heading">
             <div>
-              <h2><Activity size={18} /> Activity Feed</h2>
-              <p>Latest workspace updates</p>
+              <h2>
+                <Activity size={18} /> Activity Feed
+              </h2>
+              <p>Latest workspace updates and events</p>
             </div>
-            <button className="text-action" disabled>
-              View All <ArrowRight size={15} />
-            </button>
           </div>
 
-          <div className="activity-list">
-            {activities.map(({ title, time, Icon, type }) => (
-              <div className="activity-item" key={title}>
-                <div className={`activity-icon ${type}`}>
-                  <Icon size={16} />
-                </div>
-                <div>
-                  <strong>{title}</strong>
-                  <span>{time}</span>
-                </div>
+          {activities.length > 0 ? (
+            <div className="activity-list">
+              {/* Ready for real audit log integration */}
+            </div>
+          ) : (
+            <div className="dashboard-empty-state">
+              <div className="empty-state-icon">
+                <Activity size={24} />
               </div>
-            ))}
-          </div>
+              <h3>No recent activity</h3>
+              <p>Workspace and security events will be recorded here.</p>
+            </div>
+          )}
         </article>
 
+        {/* Brand Quote */}
         <article className="quote-card">
           <div className="quote-mark">“</div>
           <h2>Secure what matters most.</h2>
@@ -361,11 +267,6 @@ export default function Dashboard({ audience }) {
           </div>
         </article>
       </section>
-
-      <p className="demo-notice">
-        <ShieldCheck size={14} />
-        Preview dashboard — displayed figures and activity are sample data.
-      </p>
     </div>
   );
 }
