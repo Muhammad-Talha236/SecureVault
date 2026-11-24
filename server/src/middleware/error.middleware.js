@@ -52,10 +52,15 @@ export const errorHandler = (err, req, res, _next) => {
     message = "Malformed JSON payload";
   }
 
-  // Handle request body exceeding size limit
-  if (err.type === "entity.too.large" || statusCode === 413) {
+  // Handle file upload size limit (Multer)
+  if (err.code === "LIMIT_FILE_SIZE") {
+    statusCode = 413;
+    message = "File exceeds the allowed size limit of 25 MB";
+  } else if (err.type === "entity.too.large") {
     statusCode = 413;
     message = "Request payload exceeds allowed limit (max 10kb)";
+  } else if (statusCode === 413) {
+    message = err.message || "Payload exceeds allowed limit";
   }
 
   // Handle Mongoose Bad ObjectId / CastError

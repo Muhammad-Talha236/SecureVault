@@ -1,6 +1,7 @@
 import { Navigate, Route, Routes } from "react-router-dom";
 import Shell from "./components/Shell.jsx";
 import Dashboard from "./pages/Dashboard.jsx";
+import MyDocuments from "./pages/MyDocuments.jsx";
 import Placeholder from "./pages/Placeholder.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
@@ -38,8 +39,7 @@ function AppRoutes() {
     ["security-events", "Security Events"],
   ];
 
-  const user = [
-    ["my-documents", "My Documents"],
+  const userPlaceholders = [
     ["shared", "Shared With Me"],
     ["activity", "My Activity"],
   ];
@@ -75,7 +75,8 @@ function AppRoutes() {
         }
       >
         <Route index element={<Dashboard audience="User" />} />
-        {user.map(([path, title]) => (
+        <Route path="my-documents" element={<MyDocuments />} />
+        {userPlaceholders.map(([path, title]) => (
           <Route key={path} path={path} element={<Placeholder title={title} />} />
         ))}
       </Route>

@@ -1,3 +1,4 @@
+import { useState, useEffect, useCallback } from "react";
 import {
   Activity,
   ArrowRight,
@@ -16,37 +17,105 @@ import {
   Clock3,
 } from "lucide-react";
 import { useAuth } from "../context/AuthContext.jsx";
+import UploadModal, { getFileIcon } from "../components/UploadModal.jsx";
+
+const formatRelativeTime = (dateString) => {
+  if (!dateString) return "Recently";
+  const date = new Date(dateString);
+  const now = new Date();
+  const diffSec = Math.floor((now - date) / 1000);
+
+  if (diffSec < 60) return "Just now";
+  if (diffSec < 3600) return `${Math.floor(diffSec / 60)}m ago`;
+  if (diffSec < 86400) return `${Math.floor(diffSec / 3600)}h ago`;
+  if (diffSec < 604800) return `${Math.floor(diffSec / 86400)}d ago`;
+  return date.toLocaleDateString();
+};
 
 export default function Dashboard({ audience }) {
   const isAdmin = audience === "Admin";
   const { user } = useAuth();
 
-  // Metrics configured with neutral empty state ("--") ready for API integration
+  const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [dashboardData, setDashboardData] = useState({
+    stats: { totalDocuments: 0, totalSizeBytes: 0, formattedStorage: "0 B" },
+    recentFiles: [],
+    activities: [],
+  });
+
+  const fetchDashboardData = useCallback(async () => {
+    try {
+      const res = await fetch("/api/documents/dashboard", {
+        method: "GET",
+        credentials: "include",
+      });
+      if (res.ok) {
+        const data = await res.json();
+        setDashboardData({
+          stats: data.stats || { totalDocuments: 0, totalSizeBytes: 0, formattedStorage: "0 B" },
+          recentFiles: data.recentFiles || [],
+          activities: data.activities || [],
+        });
+      }
+    } catch (_err) {
+      // Keep empty states on error
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchDashboardData();
+  }, [fetchDashboardData]);
+
+  const hasDocs = dashboardData.stats.totalDocuments > 0;
+
+  // Real data metrics (falls back to "--" if no data exists)
   const adminMetrics = [
-    { label: "Total Users", value: "--", Icon: Users },
-    { label: "Total Documents", value: "--", Icon: FileText },
-    { label: "Storage Used", value: "--", Icon: Database },
-    { label: "Security Events", value: "--", Icon: ShieldCheck },
+    { label: "Total Users", value: "--", na: true, Icon: Users },
+    {
+      label: "Total Documents",
+      value: hasDocs ? String(dashboardData.stats.totalDocuments) : "--",
+      na: !hasDocs,
+      Icon: FileText,
+    },
+    {
+      label: "Storage Used",
+      value: hasDocs ? dashboardData.stats.formattedStorage : "--",
+      na: !hasDocs,
+      Icon: Database,
+    },
+    { label: "Security Events", value: "--", na: true, Icon: ShieldCheck },
   ];
 
   const userMetrics = [
-    { label: "My Documents", value: "--", Icon: FileText },
-    { label: "Shared Files", value: "--", Icon: Share2 },
-    { label: "Storage Used", value: "--", Icon: Database },
-    { label: "Favorites", value: "--", Icon: Star },
+    {
+      label: "My Documents",
+      value: hasDocs ? String(dashboardData.stats.totalDocuments) : "--",
+      na: !hasDocs,
+      Icon: FileText,
+    },
+    { label: "Shared Files", value: "--", na: true, Icon: Share2 },
+    {
+      label: "Storage Used",
+      value: hasDocs ? dashboardData.stats.formattedStorage : "--",
+      na: !hasDocs,
+      Icon: Database,
+    },
+    { label: "Favorites", value: "--", na: true, Icon: Star },
   ];
 
   const stats = isAdmin ? adminMetrics : userMetrics;
-
-  // Real data state placeholders (empty arrays ready for future backend fetching)
-  const recentFiles = [];
-  const activities = [];
-
   const displayName = user?.name || (isAdmin ? "Administrator" : "User");
 
   return (
     <div className="dashboard">
-      {/* Welcome banner with authenticated user's actual profile */}
+      {/* Upload Modal Dialog */}
+      <UploadModal
+        isOpen={isUploadOpen}
+        onClose={() => setIsUploadOpen(false)}
+        onUploadSuccess={() => fetchDashboardData()}
+      />
+
+      {/* Welcome banner with real user greeting and working upload button */}
       <section className="hero-banner">
         <div className="hero-content">
           <div className="hero-tag">
@@ -59,9 +128,10 @@ export default function Dashboard({ audience }) {
           <p>Manage your documents securely and efficiently.</p>
 
           <button
+            type="button"
             className="primary-button"
-            disabled
-            title="Upload functionality will be available in the document management module"
+            onClick={() => setIsUploadOpen(true)}
+            title="Upload and encrypt a document with AES-256-GCM"
           >
             <CloudUpload size={18} />
             Upload Document
@@ -98,9 +168,9 @@ export default function Dashboard({ audience }) {
         </div>
       </section>
 
-      {/* Metric cards with neutral empty states */}
+      {/* Metric cards with live MongoDB data */}
       <section className="metric-grid">
-        {stats.map(({ label, value, Icon }, index) => (
+        {stats.map(({ label, value, na, Icon }, index) => (
           <article className="metric-card" key={label}>
             <div className={`metric-icon metric-icon-${index + 1}`}>
               <Icon size={22} />
@@ -108,15 +178,15 @@ export default function Dashboard({ audience }) {
 
             <div className="metric-info">
               <span>{label}</span>
-              <strong className="metric-empty">{value}</strong>
+              <strong className={na ? "metric-empty" : ""}>{value}</strong>
             </div>
 
-            <span className="metric-na">No data</span>
+            {na && <span className="metric-na">No data</span>}
           </article>
         ))}
       </section>
 
-      {/* Main dashboard panels with empty states */}
+      {/* Main dashboard panels with live data or honest empty states */}
       <section className="dashboard-grid">
         {/* Storage Overview */}
         <article className="dashboard-card storage-panel">
@@ -129,17 +199,33 @@ export default function Dashboard({ audience }) {
             </div>
           </div>
 
-          <div className="dashboard-empty-state">
-            <div className="empty-state-icon">
-              <HardDrive size={24} />
+          {hasDocs ? (
+            <div className="live-storage-summary">
+              <div className="storage-summary-stat">
+                <span className="summary-label">Encrypted Storage Used</span>
+                <strong className="summary-value">{dashboardData.stats.formattedStorage}</strong>
+                <span className="summary-sub">
+                  Across {dashboardData.stats.totalDocuments} active {dashboardData.stats.totalDocuments === 1 ? "document" : "documents"}
+                </span>
+              </div>
+              <div className="storage-security-badge">
+                <LockKeyhole size={14} />
+                <span>AES-256-GCM Encrypted &middot; Private Supabase Bucket</span>
+              </div>
             </div>
-            <h3>No storage data available</h3>
-            <p>
-              {isAdmin
-                ? "Storage information will appear when documents are uploaded across the platform."
-                : "Storage information will appear when documents are uploaded."}
-            </p>
-          </div>
+          ) : (
+            <div className="dashboard-empty-state">
+              <div className="empty-state-icon">
+                <HardDrive size={24} />
+              </div>
+              <h3>No storage data available</h3>
+              <p>
+                {isAdmin
+                  ? "Storage information will appear when documents are uploaded across the platform."
+                  : "Storage information will appear when documents are uploaded."}
+              </p>
+            </div>
+          )}
         </article>
 
         {/* Recent Files */}
@@ -153,9 +239,24 @@ export default function Dashboard({ audience }) {
             </div>
           </div>
 
-          {recentFiles.length > 0 ? (
+          {dashboardData.recentFiles.length > 0 ? (
             <div className="recent-file-list">
-              {/* Ready for real document integration */}
+              {dashboardData.recentFiles.map((file) => {
+                const IconComponent = getFileIcon(file.type, file.name);
+                return (
+                  <div className="recent-file" key={file.id}>
+                    <div className="file-type-icon">
+                      <IconComponent size={20} />
+                    </div>
+                    <div className="file-details">
+                      <strong>{file.name}</strong>
+                      <span>
+                        {file.size} &bull; {formatRelativeTime(file.createdAt)}
+                      </span>
+                    </div>
+                  </div>
+                );
+              })}
             </div>
           ) : (
             <div className="dashboard-empty-state">
@@ -163,7 +264,7 @@ export default function Dashboard({ audience }) {
                 <FileText size={24} />
               </div>
               <h3>No documents uploaded yet</h3>
-              <p>Your recent documents will appear here.</p>
+              <p>Your recent documents will appear here once files are added.</p>
             </div>
           )}
         </article>
@@ -188,10 +289,11 @@ export default function Dashboard({ audience }) {
 
           <button
             className="security-link"
-            disabled
-            title="Security details will be integrated in upcoming security module"
+            type="button"
+            onClick={() => setIsUploadOpen(true)}
+            title="Upload a new encrypted document"
           >
-            Security details <ArrowRight size={15} />
+            Upload a document <ArrowRight size={15} />
           </button>
         </article>
       </section>
@@ -210,13 +312,25 @@ export default function Dashboard({ audience }) {
           </div>
 
           <div className="quick-action-list">
+            <button
+              type="button"
+              className="quick-action"
+              onClick={() => setIsUploadOpen(true)}
+              title="Upload and encrypt a document"
+            >
+              <span>
+                <CloudUpload size={21} />
+              </span>
+              <strong>Upload Document</strong>
+            </button>
+
             {[
-              [CloudUpload, "Upload Document"],
               [FolderPlus, "Create Folder"],
               [Share2, "Share Files"],
               [Star, "View Favorites"],
             ].map(([Icon, label]) => (
               <button
+                type="button"
                 className="quick-action"
                 key={label}
                 disabled
@@ -231,7 +345,7 @@ export default function Dashboard({ audience }) {
           </div>
         </article>
 
-        {/* Activity Feed */}
+        {/* Activity Feed with live AuditLog events */}
         <article className="dashboard-card activity-panel">
           <div className="card-heading">
             <div>
@@ -242,9 +356,19 @@ export default function Dashboard({ audience }) {
             </div>
           </div>
 
-          {activities.length > 0 ? (
+          {dashboardData.activities.length > 0 ? (
             <div className="activity-list">
-              {/* Ready for real audit log integration */}
+              {dashboardData.activities.map((act) => (
+                <div className="activity-item" key={act.id}>
+                  <div className="activity-icon upload">
+                    <CloudUpload size={16} />
+                  </div>
+                  <div>
+                    <strong>{act.title}</strong>
+                    <span>{formatRelativeTime(act.time)}</span>
+                  </div>
+                </div>
+              ))}
             </div>
           ) : (
             <div className="dashboard-empty-state">

@@ -6,9 +6,14 @@
   "scripts": {
     "dev": "nodemon src/server.js",
     "start": "node src/server.js",
-    "seed:admin": "node src/scripts/seedAdmin.js"
+    "seed:admin": "node src/scripts/seedAdmin.js",
+    "verify:storage": "node src/scripts/verifyStorage.js",
+    "test:encryption": "node --test tests/encryption.test.js",
+    "test:upload": "node --test tests/documentUpload.test.js",
+    "test": "node --test tests/*.test.js"
   },
   "dependencies": {
+    "@supabase/supabase-js": "^2.119.2",
     "bcrypt": "^6.0.0",
     "cookie-parser": "^1.4.7",
     "cors": "^2.8.5",
@@ -17,7 +22,8 @@
     "express-rate-limit": "^8.7.5",
     "helmet": "^8.0.0",
     "jsonwebtoken": "^9.0.3",
-    "mongoose": "^8.9.5"
+    "mongoose": "^8.9.5",
+    "multer": "^2.5.0"
   },
   "devDependencies": {
     "nodemon": "^3.1.9"
