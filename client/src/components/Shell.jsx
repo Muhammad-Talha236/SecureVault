@@ -6,7 +6,6 @@ import {
   FileText,
   FolderLock,
   LayoutDashboard,
-  LockKeyhole,
   Moon,
   ScrollText,
   Share2,
@@ -70,7 +69,6 @@ export default function Shell({ audience, theme, toggleTheme }) {
   const adminItems = [
     ["/admin", "Dashboard", LayoutDashboard, true],
     ["/admin/users", "User Management", Users],
-    ["/admin/roles", "Roles & Permissions", LockKeyhole],
     ["/admin/documents", "Document Records", FileText],
     ["/admin/audit-logs", "Audit Logs", ScrollText],
     ["/admin/security-events", "Security Events", ShieldCheck],

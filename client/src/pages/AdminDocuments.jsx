@@ -5,16 +5,12 @@ import {
   Search,
   X,
   RefreshCw,
-  ShieldCheck,
-  ShieldAlert,
-  Lock,
   Calendar,
   AlertCircle,
   Loader2,
   ChevronLeft,
   ChevronRight,
   Info,
-  CheckCircle2,
   FileSpreadsheet,
   FileImage,
   FileArchive,
@@ -22,7 +18,8 @@ import {
   Share2,
   User,
   Clock,
-  Layers,
+  HardDrive,
+  Eye,
 } from "lucide-react";
 import { secureFetch } from "../utils/api.js";
 import "./AdminPages.css";
@@ -135,7 +132,7 @@ export default function AdminDocuments() {
       setDocuments(data.documents || []);
       setPagination(data.pagination || { total: 0, page: 1, limit: 15, totalPages: 1 });
     } catch (err) {
-      setError(err.message || "Unable to communicate with documents API.");
+      setError(err.message || "Unable to retrieve document records.");
     } finally {
       setLoading(false);
     }
@@ -171,95 +168,76 @@ export default function AdminDocuments() {
     setDocPermissions([]);
   };
 
-  const handleSearchSubmit = (e) => {
-    e.preventDefault();
-    setPage(1);
-    fetchDocuments();
-  };
-
   const handleClearSearch = () => {
     setSearch("");
     setPage(1);
+    searchInputRef.current?.focus();
   };
 
   return (
     <div className="admin-page-container">
-      {/* 1. Header */}
-      <header className="admin-page-header">
+      {/* 1. Page Header */}
+      <header className="admin-header">
         <div className="admin-header-copy">
           <div className="admin-header-title-row">
+            <div className="admin-header-icon-mark">
+              <FileText size={22} />
+            </div>
             <h1>Document Records</h1>
             <span className="admin-counter-badge">{pagination.total} Total</span>
           </div>
-          <p className="admin-header-subtitle">
-            Platform-wide encrypted catalog, cryptographic metadata, and access governance.
-          </p>
+          <p>Overview of platform-wide stored documents, file sizes, and ownership.</p>
         </div>
 
         <div className="admin-header-actions">
           <button
             type="button"
-            className="admin-btn-secondary"
+            className="admin-refresh-btn"
             onClick={fetchDocuments}
             disabled={loading}
-            title="Refresh document records"
+            title="Refresh document records list"
           >
-            <RefreshCw size={15} className={loading ? "admin-spin" : ""} />
+            <RefreshCw size={15} className={loading ? "admin-spinner" : ""} />
             <span>Refresh</span>
           </button>
         </div>
       </header>
 
-      {/* 2. Zero-Knowledge Governance Notice */}
-      <div className="admin-security-pill-card">
-        <div className="admin-security-pill-icon">
-          <Lock size={16} />
+      {/* 2. Filter Toolbar (Search & Filter Pills) */}
+      <section className="admin-toolbar">
+        <div className="admin-search-wrapper">
+          <Search size={16} className="admin-search-icon" />
+          <input
+            ref={searchInputRef}
+            type="text"
+            className="admin-search-input"
+            placeholder="Search by document name or owner..."
+            value={search}
+            onChange={(e) => {
+              setSearch(e.target.value);
+              setPage(1);
+            }}
+          />
+          {search && (
+            <button
+              type="button"
+              className="admin-search-clear"
+              onClick={handleClearSearch}
+              aria-label="Clear search"
+            >
+              <X size={14} />
+            </button>
+          )}
         </div>
-        <div className="admin-security-pill-text">
-          <strong>Zero-Knowledge Cryptographic Isolation:</strong> Document ciphertexts are encrypted
-          with AES-256-GCM using isolated user keys. Administrators can inspect governance metadata
-          and active sharing grants, but have no administrative decryption or download bypass.
-        </div>
-      </div>
 
-      {/* 3. Filter Toolbar */}
-      <div className="admin-toolbar-card">
-        <form onSubmit={handleSearchSubmit} className="admin-search-form">
-          <div className="admin-search-input-wrap">
-            <Search size={16} className="admin-search-icon" />
-            <input
-              ref={searchInputRef}
-              type="text"
-              placeholder="Search by document name or owner..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              className="admin-search-input"
-            />
-            {search && (
-              <button
-                type="button"
-                className="admin-search-clear"
-                onClick={handleClearSearch}
-                aria-label="Clear search query"
-              >
-                <X size={14} />
-              </button>
-            )}
-          </div>
-          <button type="submit" className="admin-btn-primary admin-search-btn">
-            Search
-          </button>
-        </form>
-
-        {/* Filter Pills */}
-        <div className="admin-filter-groups">
-          <div className="admin-filter-pill-group">
-            <span className="admin-filter-label">Format:</span>
-            {FORMAT_FILTERS.map((f) => (
+        <div className="admin-filter-pills" role="tablist">
+          {FORMAT_FILTERS.map((f) => {
+            const isActive = selectedFormat === f.id;
+            return (
               <button
                 key={f.id}
                 type="button"
-                className={`admin-filter-pill ${selectedFormat === f.id ? "active" : ""}`}
+                className={`admin-filter-btn ${isActive ? "active" : ""}`}
                 onClick={() => {
                   setSelectedFormat(f.id);
                   setPage(1);
@@ -267,16 +245,18 @@ export default function AdminDocuments() {
               >
                 {f.label}
               </button>
-            ))}
-          </div>
+            );
+          })}
+        </div>
 
-          <div className="admin-filter-pill-group">
-            <span className="admin-filter-label">Status:</span>
-            {STATUS_FILTERS.map((s) => (
+        <div className="admin-filter-pills" role="tablist">
+          {STATUS_FILTERS.map((s) => {
+            const isActive = selectedStatus === s.id;
+            return (
               <button
                 key={s.id}
                 type="button"
-                className={`admin-filter-pill ${selectedStatus === s.id ? "active" : ""}`}
+                className={`admin-filter-btn ${isActive ? "active" : ""}`}
                 onClick={() => {
                   setSelectedStatus(s.id);
                   setPage(1);
@@ -284,43 +264,54 @@ export default function AdminDocuments() {
               >
                 {s.label}
               </button>
-            ))}
-          </div>
+            );
+          })}
         </div>
-      </div>
+      </section>
 
-      {/* Error state */}
+      {/* Feedback Alerts */}
       {error && (
-        <div className="admin-alert-banner error" role="alert">
-          <AlertCircle size={18} />
-          <div>
-            <strong>Error loading records:</strong> {error}
+        <div className="admin-alert error" role="alert">
+          <div className="admin-alert-inner">
+            <AlertCircle size={18} className="alert-icon" />
+            <span>{error}</span>
           </div>
+          <button
+            type="button"
+            className="admin-alert-close"
+            onClick={() => setError("")}
+            aria-label="Dismiss error"
+          >
+            <X size={16} />
+          </button>
         </div>
       )}
 
-      {/* 4. Table / Content Area */}
-      <div className="admin-table-surface">
-        {loading ? (
-          <div className="admin-loading-state">
-            <Loader2 size={32} className="admin-spin" />
-            <p>Loading document records from database...</p>
+      {/* 3. Main Document Table Surface */}
+      <div className="admin-card-container">
+        {loading && documents.length === 0 ? (
+          <div className="admin-state-card">
+            <div className="admin-state-icon">
+              <Loader2 size={32} className="admin-spinner" />
+            </div>
+            <h3>Loading documents...</h3>
+            <p>Accessing platform document records from database.</p>
           </div>
         ) : documents.length === 0 ? (
-          <div className="admin-empty-state">
-            <div className="admin-empty-icon-wrap">
-              <FileText size={32} />
+          <div className="admin-state-card">
+            <div className="admin-state-icon empty">
+              <FileText size={34} />
             </div>
-            <h3>No document records found</h3>
+            <h3>No documents found</h3>
             <p>
               {search || selectedFormat !== "all" || selectedStatus !== "all"
-                ? "No documents match the specified search or filter criteria. Try adjusting your query."
+                ? "No document records match your current search or filter criteria."
                 : "No documents have been uploaded to SecureVault yet."}
             </p>
-            {(search || selectedFormat !== "all" || selectedStatus !== "all") && (
+            {search || selectedFormat !== "all" || selectedStatus !== "all" ? (
               <button
                 type="button"
-                className="admin-btn-secondary"
+                className="admin-refresh-btn"
                 onClick={() => {
                   setSearch("");
                   setSelectedFormat("all");
@@ -328,25 +319,23 @@ export default function AdminDocuments() {
                   setPage(1);
                 }}
               >
-                Reset All Filters
+                Reset Filters
               </button>
-            )}
+            ) : null}
           </div>
         ) : (
           <>
-            {/* Desktop Table View */}
+            {/* Desktop / Tablet Table */}
             <div className="admin-table-wrapper">
-              <table className="admin-data-table">
+              <table className="admin-table">
                 <thead>
                   <tr>
                     <th>Document</th>
                     <th>Owner</th>
                     <th>Size</th>
-                    <th>Encryption</th>
-                    <th>Integrity</th>
                     <th>Status</th>
                     <th>Upload Date</th>
-                    <th className="text-right">Actions</th>
+                    <th className="th-actions">Details</th>
                   </tr>
                 </thead>
                 <tbody>
@@ -379,25 +368,9 @@ export default function AdminDocuments() {
                           </div>
                         </td>
 
-                        {/* Size */}
+                        {/* File Size */}
                         <td>
                           <span className="admin-mono-cell">{doc.formattedSize}</span>
-                        </td>
-
-                        {/* Encryption */}
-                        <td>
-                          <div className="admin-crypto-badge">
-                            <ShieldCheck size={13} className="text-green" />
-                            <span>{doc.encryption.algorithm}</span>
-                            <span className="admin-key-ver">v{doc.encryption.keyVersion}</span>
-                          </div>
-                        </td>
-
-                        {/* Integrity */}
-                        <td>
-                          <span className="admin-hash-pill">
-                            {doc.integrity.algorithm}
-                          </span>
                         </td>
 
                         {/* Status */}
@@ -418,21 +391,21 @@ export default function AdminDocuments() {
                         {/* Upload Date */}
                         <td>
                           <div className="admin-date-col">
-                            <span>{formatShortDate(doc.createdAt)}</span>
-                            <span className="admin-time-sub">{formatShortTime(doc.createdAt)}</span>
+                            <span className="date-main">{formatShortDate(doc.createdAt)}</span>
+                            <span className="date-sub">{formatShortTime(doc.createdAt)}</span>
                           </div>
                         </td>
 
-                        {/* Actions */}
-                        <td className="text-right">
+                        {/* Inspect Details Action */}
+                        <td className="th-actions">
                           <button
                             type="button"
-                            className="admin-action-btn view-details"
+                            className="admin-role-btn"
                             onClick={() => handleOpenDetails(doc)}
-                            title="Inspect metadata and access permissions"
+                            title="View document details and permissions"
                           >
-                            <Info size={15} />
-                            <span>Inspect</span>
+                            <Eye size={14} />
+                            <span>Details</span>
                           </button>
                         </td>
                       </tr>
@@ -442,62 +415,50 @@ export default function AdminDocuments() {
               </table>
             </div>
 
-            {/* Mobile Card List */}
-            <div className="admin-cards-mobile">
+            {/* Mobile Cards (shown on mobile screens) */}
+            <div className="admin-mobile-cards">
               {documents.map((doc) => {
                 const IconComponent = getFileIcon(doc.mimeType, doc.originalName);
                 const isDeleted = doc.status === "DELETED";
 
                 return (
                   <div key={doc.id} className={`admin-mobile-card ${isDeleted ? "deleted" : ""}`}>
-                    <div className="admin-mobile-card-header">
-                      <div className="admin-doc-col">
-                        <div className={`admin-doc-icon-wrap ${isDeleted ? "deleted" : ""}`}>
-                          <IconComponent size={18} />
-                        </div>
-                        <div className="admin-doc-text">
-                          <span className="admin-doc-name">{doc.originalName}</span>
-                          <span className="admin-doc-mime">{doc.mimeType}</span>
-                        </div>
+                    <div className="admin-card-top">
+                      <div className={`admin-doc-icon-wrap ${isDeleted ? "deleted" : ""}`}>
+                        <IconComponent size={18} />
+                      </div>
+                      <div className="admin-card-user-info">
+                        <span className="admin-doc-name">{doc.originalName}</span>
+                        <span className="admin-doc-mime">{doc.mimeType}</span>
                       </div>
                       <span className={`admin-status-badge ${isDeleted ? "deleted" : "active"}`}>
                         {doc.status}
                       </span>
                     </div>
 
-                    <div className="admin-mobile-card-body">
-                      <div className="admin-mobile-row">
-                        <span className="label">Owner:</span>
-                        <span className="value">
-                          {doc.owner.name} ({doc.owner.email})
-                        </span>
+                    <div className="admin-card-meta-row">
+                      <div className="card-meta-item">
+                        <User size={13} />
+                        <span>{doc.owner.name}</span>
                       </div>
-                      <div className="admin-mobile-row">
-                        <span className="label">Size:</span>
-                        <span className="value mono">{doc.formattedSize}</span>
+                      <div className="card-meta-item">
+                        <HardDrive size={13} />
+                        <span className="mono">{doc.formattedSize}</span>
                       </div>
-                      <div className="admin-mobile-row">
-                        <span className="label">Encryption:</span>
-                        <span className="value">
-                          {doc.encryption.algorithm} (v{doc.encryption.keyVersion})
-                        </span>
-                      </div>
-                      <div className="admin-mobile-row">
-                        <span className="label">Uploaded:</span>
-                        <span className="value">
-                          {formatShortDate(doc.createdAt)} {formatShortTime(doc.createdAt)}
-                        </span>
+                      <div className="card-meta-item">
+                        <Calendar size={13} />
+                        <span>{formatShortDate(doc.createdAt)}</span>
                       </div>
                     </div>
 
-                    <div className="admin-mobile-card-footer">
+                    <div className="admin-card-actions">
                       <button
                         type="button"
-                        className="admin-btn-secondary full-width"
+                        className="mobile-manage-btn"
                         onClick={() => handleOpenDetails(doc)}
                       >
-                        <Info size={15} />
-                        <span>Inspect Metadata &amp; Permissions</span>
+                        <Eye size={14} />
+                        <span>View Details</span>
                       </button>
                     </div>
                   </div>
@@ -505,191 +466,143 @@ export default function AdminDocuments() {
               })}
             </div>
 
-            {/* 5. Pagination */}
-            <div className="admin-pagination-bar">
-              <div className="admin-pagination-info">
-                Showing page <strong>{pagination.page}</strong> of{" "}
-                <strong>{pagination.totalPages}</strong> ({pagination.total} total documents)
-              </div>
-              <div className="admin-pagination-controls">
-                <button
-                  type="button"
-                  className="admin-btn-page"
-                  disabled={pagination.page <= 1 || loading}
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  aria-label="Previous page"
-                >
-                  <ChevronLeft size={16} />
-                  <span>Previous</span>
-                </button>
-                <button
-                  type="button"
-                  className="admin-btn-page"
-                  disabled={pagination.page >= pagination.totalPages || loading}
-                  onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
-                  aria-label="Next page"
-                >
-                  <span>Next</span>
-                  <ChevronRight size={16} />
-                </button>
-              </div>
+            {/* Pagination Controls */}
+            <div className="admin-pagination">
+              <span className="pagination-count-label">
+                Showing <strong>{documents.length}</strong> of <strong>{pagination.total}</strong> documents (Page {page} of {pagination.totalPages})
+              </span>
+              {pagination.totalPages > 1 && (
+                <div className="admin-pagination-btns">
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={() => setPage((p) => Math.max(1, p - 1))}
+                    disabled={page <= 1 || loading}
+                    aria-label="Previous page"
+                  >
+                    <ChevronLeft size={16} />
+                  </button>
+
+                  <span className="pagination-page-indicator">
+                    Page {page} of {pagination.totalPages}
+                  </span>
+
+                  <button
+                    type="button"
+                    className="pagination-btn"
+                    onClick={() => setPage((p) => Math.min(pagination.totalPages, p + 1))}
+                    disabled={page >= pagination.totalPages || loading}
+                    aria-label="Next page"
+                  >
+                    <ChevronRight size={16} />
+                  </button>
+                </div>
+              )}
             </div>
           </>
         )}
       </div>
 
-      {/* 6. Document Details & Permissions Modal */}
+      {/* 4. Document Details Modal */}
       {selectedDoc &&
         createPortal(
           <div
-            className="sv-admin-modal-overlay"
+            className="admin-modal-overlay"
             onClick={(e) => {
               if (e.target === e.currentTarget) handleCloseDetails();
             }}
             role="dialog"
             aria-modal="true"
           >
-            <div className="sv-admin-modal-card wide" onClick={(e) => e.stopPropagation()}>
-              <div className="sv-admin-modal-header">
-                <div className="sv-admin-modal-header-left">
-                  <div className="sv-admin-modal-icon-badge blue">
-                    <ShieldCheck size={22} />
-                  </div>
-                  <div>
-                    <h2>Document Governance &amp; Metadata</h2>
-                    <p className="subtitle">
-                      Cryptographic record audit and cross-user permission inspect.
-                    </p>
-                  </div>
+            <div className="admin-modal-card" onClick={(e) => e.stopPropagation()}>
+              <div className="admin-modal-header">
+                <div className="admin-modal-icon-badge blue">
+                  <FileText size={22} />
                 </div>
-                <button
-                  type="button"
-                  className="sv-modal-close-btn"
-                  onClick={handleCloseDetails}
-                  aria-label="Close dialog"
-                >
-                  <X size={18} />
-                </button>
+                <div className="admin-modal-header-copy">
+                  <h3>Document Details</h3>
+                  <p>Metadata &amp; Access Overview</p>
+                </div>
               </div>
 
-              <div className="sv-admin-modal-body">
-                {/* Document summary box */}
-                <div className="admin-inspect-summary-box">
-                  <div className="summary-field">
-                    <span className="field-label">Document Name</span>
-                    <strong className="field-value">{selectedDoc.originalName}</strong>
-                  </div>
-                  <div className="summary-field">
-                    <span className="field-label">Record ID</span>
-                    <span className="field-value mono">{selectedDoc.id}</span>
-                  </div>
-                  <div className="summary-field">
-                    <span className="field-label">File Size</span>
-                    <span className="field-value">{selectedDoc.formattedSize}</span>
-                  </div>
-                  <div className="summary-field">
-                    <span className="field-label">Status</span>
-                    <span className={`admin-status-badge ${selectedDoc.status.toLowerCase()}`}>
-                      {selectedDoc.status}
-                    </span>
-                  </div>
-                  <div className="summary-field">
-                    <span className="field-label">Owner</span>
-                    <span className="field-value">
-                      {selectedDoc.owner.name} ({selectedDoc.owner.email})
-                    </span>
-                  </div>
-                  <div className="summary-field">
-                    <span className="field-label">Uploaded At</span>
-                    <span className="field-value">
-                      {formatShortDate(selectedDoc.createdAt)} {formatShortTime(selectedDoc.createdAt)}
-                    </span>
-                  </div>
+              <div className="admin-inspect-summary-box">
+                <div className="summary-field">
+                  <span className="field-label">Document Name</span>
+                  <strong className="field-value">{selectedDoc.originalName}</strong>
                 </div>
-
-                {/* Cryptographic Proof Details */}
-                <div className="admin-crypto-details-card">
-                  <h4>Cryptographic Specification</h4>
-                  <div className="crypto-specs-grid">
-                    <div className="crypto-spec-item">
-                      <span className="spec-title">Encryption Algorithm</span>
-                      <span className="spec-value highlight">
-                        {selectedDoc.encryption.algorithm} (Authenticated)
-                      </span>
-                    </div>
-                    <div className="crypto-spec-item">
-                      <span className="spec-title">Master Key Version</span>
-                      <span className="spec-value">Version {selectedDoc.encryption.keyVersion}</span>
-                    </div>
-                    <div className="crypto-spec-item">
-                      <span className="spec-title">Integrity Verification</span>
-                      <span className="spec-value">{selectedDoc.integrity.algorithm} Digest</span>
-                    </div>
-                    <div className="crypto-spec-item">
-                      <span className="spec-title">IV &amp; Tag Storage</span>
-                      <span className="spec-value secure">Isolated &amp; Secret</span>
-                    </div>
-                  </div>
+                <div className="summary-field">
+                  <span className="field-label">File Size</span>
+                  <span className="field-value">{selectedDoc.formattedSize}</span>
                 </div>
-
-                {/* Active Sharing Grants / Permissions */}
-                <div className="admin-permissions-section">
-                  <div className="section-title-row">
-                    <Share2 size={16} />
-                    <h4>Active Document Permissions (Cross-User Grants)</h4>
-                  </div>
-
-                  {loadingPermissions ? (
-                    <div className="admin-loading-inline">
-                      <Loader2 size={18} className="admin-spin" />
-                      <span>Checking permission model...</span>
-                    </div>
-                  ) : docPermissions.length === 0 ? (
-                    <div className="admin-no-permissions-box">
-                      <p>
-                        No active cross-user permissions found. This document is strictly private to
-                        owner <strong>{selectedDoc.owner.name}</strong>.
-                      </p>
-                    </div>
-                  ) : (
-                    <div className="admin-permissions-list">
-                      {docPermissions.map((perm) => (
-                        <div key={perm.id} className="admin-permission-item">
-                          <div className="perm-user-info">
-                            <strong>{perm.user.name}</strong>
-                            <span>{perm.user.email}</span>
-                          </div>
-                          <div className="perm-meta">
-                            <span className={`perm-badge ${perm.permission.toLowerCase()}`}>
-                              {perm.permission}
-                            </span>
-                            <span className="perm-granted-by">
-                              Granted by: {perm.grantedBy.name}
-                            </span>
-                          </div>
-                        </div>
-                      ))}
-                    </div>
-                  )}
-                </div>
-
-                {/* Zero-Knowledge Security Callout */}
-                <div className="admin-modal-security-footer">
-                  <Lock size={15} />
-                  <span>
-                    Zero-Knowledge Guarantee: Decryption keys are managed client/user side. Platform
-                    admins can audit metadata records, but cannot view or decrypt payload content.
+                <div className="summary-field">
+                  <span className="field-label">Owner</span>
+                  <span className="field-value">
+                    {selectedDoc.owner.name} ({selectedDoc.owner.email})
                   </span>
                 </div>
+                <div className="summary-field">
+                  <span className="field-label">Status</span>
+                  <span className={`admin-status-badge ${selectedDoc.status.toLowerCase()}`}>
+                    {selectedDoc.status}
+                  </span>
+                </div>
+                <div className="summary-field">
+                  <span className="field-label">Uploaded At</span>
+                  <span className="field-value">
+                    {formatShortDate(selectedDoc.createdAt)} {formatShortTime(selectedDoc.createdAt)}
+                  </span>
+                </div>
+                <div className="summary-field">
+                  <span className="field-label">Format / MIME</span>
+                  <span className="field-value">{selectedDoc.mimeType}</span>
+                </div>
               </div>
 
-              <div className="sv-admin-modal-actions">
+              {/* Active Sharing Grants */}
+              <div className="admin-permissions-section">
+                <div className="section-title-row">
+                  <Share2 size={16} />
+                  <h4>Sharing Grants</h4>
+                </div>
+
+                {loadingPermissions ? (
+                  <div className="admin-loading-inline">
+                    <Loader2 size={16} className="admin-spinner" />
+                    <span>Loading permissions...</span>
+                  </div>
+                ) : docPermissions.length === 0 ? (
+                  <div className="admin-no-permissions-box">
+                    <p>
+                      No active share grants. This file is private to owner{" "}
+                      <strong>{selectedDoc.owner.name}</strong>.
+                    </p>
+                  </div>
+                ) : (
+                  <div className="admin-permissions-list">
+                    {docPermissions.map((perm) => (
+                      <div key={perm.id} className="admin-permission-item">
+                        <div className="perm-user-info">
+                          <strong>{perm.user.name}</strong>
+                          <span>{perm.user.email}</span>
+                        </div>
+                        <div className="perm-meta">
+                          <span className={`perm-badge ${perm.permission.toLowerCase()}`}>
+                            {perm.permission}
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
+
+              <div className="admin-modal-actions">
                 <button
                   type="button"
-                  className="admin-btn-secondary"
+                  className="modal-btn-cancel"
                   onClick={handleCloseDetails}
                 >
-                  Close Inspection
+                  Close
                 </button>
               </div>
             </div>

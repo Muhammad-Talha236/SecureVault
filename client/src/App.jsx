@@ -4,7 +4,6 @@ import Dashboard from "./pages/Dashboard.jsx";
 import MyDocuments from "./pages/MyDocuments.jsx";
 import AdminUsers from "./pages/AdminUsers.jsx";
 import AdminDocuments from "./pages/AdminDocuments.jsx";
-import AdminRoles from "./pages/AdminRoles.jsx";
 import Placeholder from "./pages/Placeholder.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
@@ -65,7 +64,6 @@ function AppRoutes() {
         {/* Talha's Completed Admin Modules */}
         <Route path="users" element={<AdminUsers />} />
         <Route path="documents" element={<AdminDocuments />} />
-        <Route path="roles" element={<AdminRoles />} />
 
         {/* Laiba's Modules */}
         {remainingAdminModules.map(([path, title]) => (
