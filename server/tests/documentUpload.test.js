@@ -51,7 +51,7 @@ describe("Document Upload API & Security Verification", () => {
     if (testUser) await User.deleteOne({ _id: testUser._id });
     if (otherUser) await User.deleteOne({ _id: otherUser._id });
     await Document.deleteMany({ owner: { $in: [testUser?._id, otherUser?._id] } });
-    await AuditLog.deleteMany({ actor: { $in: [testUser?._id, otherUser?._id] } });
+    await AuditLog.collection.deleteMany({ actor: { $in: [testUser?._id, otherUser?._id] } });
 
     server.close();
     await mongoose.connection.close();

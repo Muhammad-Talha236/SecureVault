@@ -106,7 +106,7 @@ describe("Secure Document Deletion API Suite", () => {
     // Cleanup test records
     const testUserIds = [ownerUser?._id, attackerUser?._id, adminUser?._id].filter(Boolean);
     await Document.deleteMany({ owner: { $in: testUserIds } });
-    await AuditLog.deleteMany({ actor: { $in: testUserIds } });
+    await AuditLog.collection.deleteMany({ actor: { $in: testUserIds } });
     await DocumentPermission.deleteMany({ user: { $in: testUserIds } });
     await User.deleteMany({ _id: { $in: testUserIds } });
 

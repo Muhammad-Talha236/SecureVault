@@ -5,6 +5,7 @@ import app from "../src/app.js";
 import User from "../src/models/user.model.js";
 import Document from "../src/models/document.model.js";
 import AuditLog from "../src/models/auditLog.model.js";
+import { logAuditEvent } from "../src/services/audit.service.js";
 import DocumentPermission from "../src/models/documentPermission.model.js";
 import { signAccessToken } from "../src/utils/token.utils.js";
 
@@ -20,6 +21,7 @@ describe("Talha's Admin Modules Test Suite", () => {
 
   const testUserIds = [];
   const testDocIds = [];
+  const testAuditResourceIds = [];
 
   before(async () => {
     if (mongoose.connection.readyState === 0) {
@@ -91,7 +93,10 @@ describe("Talha's Admin Modules Test Suite", () => {
     }
     if (testUserIds.length > 0) {
       await User.deleteMany({ _id: { $in: testUserIds } });
-      await AuditLog.deleteMany({ actor: { $in: testUserIds } });
+      await AuditLog.collection.deleteMany({ actor: { $in: testUserIds } });
+    }
+    if (testAuditResourceIds.length > 0) {
+      await AuditLog.collection.deleteMany({ resourceId: { $in: testAuditResourceIds } });
     }
 
     if (server) {
@@ -388,6 +393,80 @@ describe("Talha's Admin Modules Test Suite", () => {
       const createdUser = await User.findById(data.user.id);
       testUserIds.push(createdUser._id);
       assert.equal(createdUser.role, "USER");
+    });
+  });
+
+  // ========================================================
+  // 8. Audit API, access control, and append-only behavior
+  // ========================================================
+  describe("Audit Forensics API", () => {
+    it("filters records, enforces admin access, and rejects all mutation methods", async () => {
+      const targetEmail = `forensic-${Date.now()}@securevault.test`;
+      const targetDocument = `forensic-document-${Date.now()}`;
+      testAuditResourceIds.push(targetEmail, targetDocument);
+      for (let attempt = 0; attempt < 5; attempt += 1) {
+        await logAuditEvent({ action: "LOGIN_FAILURE", resourceType: "USER", resourceId: targetEmail,
+          outcome: "FAILURE", ipAddress: "192.0.2.15", userAgent: "Audit test client",
+          metadata: { reason: "Invalid credentials", password: "must-not-persist", apiKey: "must-not-persist" } });
+      }
+      const log = await logAuditEvent({ actor: standardUser._id, action: "ACCESS_DENIED",
+        resourceType: "DOCUMENT", resourceId: targetDocument, outcome: "DENIED",
+        ipAddress: "192.0.2.15", userAgent: "Audit test client", metadata: { reason: "Unauthorized document access" } });
+
+      const unauthenticated = await fetch(`${baseUrl}/api/audit-logs`);
+      assert.equal(unauthenticated.status, 401);
+
+      const forbidden = await fetch(`${baseUrl}/api/audit-logs`, {
+        headers: { Cookie: `accessToken=${standardToken}` },
+      });
+      assert.equal(forbidden.status, 403);
+
+      const list = await fetch(`${baseUrl}/api/audit-logs?action=LOGIN_FAILURE&outcome=FAILURE&resourceId=${targetEmail}`, {
+        headers: { Cookie: `accessToken=${adminToken}` },
+      });
+      assert.equal(list.status, 200);
+      const data = await list.json();
+      assert.equal(data.logs.length, 5);
+      assert.ok(data.logs.every((entry) => entry.action === "LOGIN_FAILURE" && entry.outcome === "FAILURE"));
+      assert.ok(data.logs.every((entry, index) => index === 0 || new Date(data.logs[index - 1].createdAt) >= new Date(entry.createdAt)));
+      assert.equal(data.logs[0].actor, null);
+      assert.equal(data.logs[0].metadata.password, undefined);
+      assert.equal(data.logs[0].metadata.apiKey, undefined);
+
+      const statsResponse = await fetch(`${baseUrl}/api/audit-logs/stats`, {
+        headers: { Cookie: `accessToken=${adminToken}` },
+      });
+      assert.equal(statsResponse.status, 200);
+      const statsData = await statsResponse.json();
+      for (const key of ["totalEventsToday", "failedLogins", "accessDenials", "integrityFailures"]) {
+        assert.equal(typeof statsData.stats[key], "number");
+      }
+
+      const detail = await fetch(`${baseUrl}/api/audit-logs/${log._id}`, {
+        headers: { Cookie: `accessToken=${adminToken}` },
+      });
+      assert.equal(detail.status, 200);
+      const detailData = await detail.json();
+      assert.equal(detailData.log.actor.email, standardUser.email);
+
+      const denial = await fetch(`${baseUrl}/api/audit-logs?outcome=DENIED&search=${targetDocument}`, {
+        headers: { Cookie: `accessToken=${adminToken}` },
+      });
+      const denialData = await denial.json();
+      assert.equal(denial.status, 200);
+      assert.equal(denialData.logs.length, 1);
+      assert.equal(denialData.logs[0].id, String(log._id));
+
+      for (const method of ["PUT", "PATCH", "DELETE"]) {
+        const response = await fetch(`${baseUrl}/api/audit-logs/${log._id}`, {
+          method,
+          headers: { Cookie: `accessToken=${adminToken}`, "Content-Type": "application/json" },
+          body: method === "DELETE" ? undefined : JSON.stringify({ outcome: "SUCCESS" }),
+        });
+        assert.equal(response.status, 404, `${method} must not be routed`);
+      }
+      await assert.rejects(() => AuditLog.updateOne({ _id: log._id }, { outcome: "SUCCESS" }).exec(), /append-only/i);
+      await assert.rejects(() => AuditLog.deleteOne({ _id: log._id }).exec(), /append-only/i);
     });
   });
 });

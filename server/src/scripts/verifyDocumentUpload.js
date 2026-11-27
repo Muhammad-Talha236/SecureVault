@@ -296,7 +296,7 @@ async function runVerification() {
     console.log("Cleaning up test documents from Supabase and MongoDB...");
     await supabase.storage.from(SUPABASE_BUCKET).remove([storageKey]);
     await Document.findByIdAndDelete(savedDoc._id);
-    await AuditLog.findByIdAndDelete(auditRecord._id);
+    await AuditLog.collection.deleteOne({ _id: auditRecord._id });
     console.log("✓ Cleanup completed successfully.\n");
 
     console.log("===============================================================");
