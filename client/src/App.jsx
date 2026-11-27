@@ -7,6 +7,7 @@ import AdminDocuments from "./pages/AdminDocuments.jsx";
 import Placeholder from "./pages/Placeholder.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
+import AuditLogs from "./pages/AuditLogs.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
 import { ThemeProvider, useTheme } from "./context/ThemeContext.jsx";
@@ -32,12 +33,6 @@ function RootRedirect() {
 
 function AppRoutes() {
   const { theme, toggleTheme } = useTheme();
-
-  // Assigned to Laiba (Audit & Security Events)
-  const remainingAdminModules = [
-    ["audit-logs", "Audit Logs"],
-    ["security-events", "Security Events"],
-  ];
 
   // Assigned to Faiza (Document Sharing)
   const userPlaceholders = [
@@ -66,9 +61,8 @@ function AppRoutes() {
         <Route path="documents" element={<AdminDocuments />} />
 
         {/* Laiba's Modules */}
-        {remainingAdminModules.map(([path, title]) => (
-          <Route key={path} path={path} element={<Placeholder title={title} />} />
-        ))}
+        <Route path="audit-logs" element={<AuditLogs />} />
+        <Route path="security-events" element={<Placeholder title="Security Events" />} />
       </Route>
 
       {/* Protected User Workspace */}

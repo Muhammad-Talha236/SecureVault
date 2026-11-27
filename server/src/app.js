@@ -6,6 +6,7 @@ import healthRoutes from "./routes/health.routes.js";
 import authRoutes from "./routes/auth.routes.js";
 import documentRoutes from "./routes/document.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
+import auditRoutes from "./routes/audit.routes.js";
 import { notFoundHandler, errorHandler } from "./middleware/error.middleware.js";
 
 const app = express();
@@ -75,6 +76,7 @@ app.use("/api/health", healthRoutes);
 app.use("/api/auth", authRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/admin", adminRoutes);
+app.use("/api/audit-logs", auditRoutes);
 
 // 6. 404 Handler for undefined API routes
 app.use(notFoundHandler);

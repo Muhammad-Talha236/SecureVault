@@ -4,12 +4,14 @@ import RefreshToken from "../models/refreshToken.model.js";
 import { hashPassword, comparePassword } from "../utils/password.utils.js";
 import {
   signAccessToken,
+  verifyAccessToken,
   generateRefreshToken,
   hashToken,
   getCookieOptions,
   getClearCookieOptions,
 } from "../utils/token.utils.js";
 import { AppError } from "../middleware/error.middleware.js";
+import { logAuditEvent } from "../services/audit.service.js";
 
 const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
 
@@ -91,12 +93,18 @@ export const login = async (req, res) => {
   // 1. Find user with passwordHash
   const user = await User.findOne({ email: normalizedEmail }).select("+passwordHash");
   if (!user) {
+    await logAuditEvent({ action: "LOGIN_FAILURE", resourceType: "USER", resourceId: normalizedEmail,
+      outcome: "FAILURE", ipAddress: req.ip, userAgent: req.get("user-agent"),
+      metadata: { reason: "Invalid credentials" } });
     throw new AppError("Invalid email or password.", 401);
   }
 
   // 2. Compare password
   const isMatch = await comparePassword(password, user.passwordHash);
   if (!isMatch) {
+    await logAuditEvent({ action: "LOGIN_FAILURE", resourceType: "USER", resourceId: normalizedEmail,
+      outcome: "FAILURE", ipAddress: req.ip, userAgent: req.get("user-agent"),
+      metadata: { reason: "Invalid credentials" } });
     throw new AppError("Invalid email or password.", 401);
   }
 
@@ -123,6 +131,9 @@ export const login = async (req, res) => {
   // 6. Set HTTP-only cookies
   res.cookie("accessToken", accessToken, getCookieOptions(false));
   res.cookie("refreshToken", rawToken, getCookieOptions(true));
+  await logAuditEvent({ actor: user._id, action: "LOGIN_SUCCESS", resourceType: "USER",
+    resourceId: user._id, outcome: "SUCCESS", ipAddress: req.ip,
+    userAgent: req.get("user-agent"), metadata: { role: user.role } });
 
   res.status(200).json({
     success: true,
@@ -279,6 +290,13 @@ export const refreshToken = async (req, res) => {
  * POST /api/auth/logout
  */
 export const logout = async (req, res) => {
+  let actor = null;
+  const accessToken = req.cookies?.accessToken || req.cookies?.access_token;
+  if (accessToken) {
+    try {
+      actor = verifyAccessToken(accessToken).id || null;
+    } catch (_error) { /* Expired access cookie is expected during logout. */ }
+  }
   const rawToken =
     req.cookies?.refreshToken ||
     req.cookies?.refresh_token ||
@@ -288,7 +306,8 @@ export const logout = async (req, res) => {
   if (rawToken && typeof rawToken === "string") {
     try {
       const tokenHash = hashToken(rawToken);
-      await RefreshToken.updateOne({ tokenHash }, { revokedAt: new Date() });
+      const session = await RefreshToken.findOneAndUpdate({ tokenHash }, { revokedAt: new Date() }, { new: true });
+      actor = actor || session?.user || null;
     } catch (_err) {
       // Ignore hashing or db error during logout
     }
@@ -298,6 +317,9 @@ export const logout = async (req, res) => {
   res.clearCookie("access_token", getClearCookieOptions(false));
   res.clearCookie("refreshToken", getClearCookieOptions(true));
   res.clearCookie("refresh_token", getClearCookieOptions(true));
+
+  await logAuditEvent({ actor, action: "LOGOUT", resourceType: "USER", resourceId: actor,
+    outcome: "SUCCESS", ipAddress: req.ip, userAgent: req.get("user-agent") });
 
   res.status(200).json({
     success: true,

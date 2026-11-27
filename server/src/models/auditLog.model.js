@@ -79,6 +79,16 @@ auditLogSchema.index({ resourceId: 1 });
 auditLogSchema.index({ createdAt: -1 });
 auditLogSchema.index({ action: 1, createdAt: -1 });
 
+// Audit records are immutable through normal Mongoose model operations.
+for (const operation of ["updateOne", "updateMany", "findOneAndUpdate", "replaceOne", "deleteOne", "deleteMany", "findOneAndDelete", "findOneAndReplace"]) {
+  auditLogSchema.pre(operation, function rejectAuditMutation() {
+    throw new Error("Audit records are append-only and cannot be modified or deleted");
+  });
+}
+auditLogSchema.pre("save", function rejectAuditResave() {
+  if (!this.isNew) throw new Error("Audit records are append-only and cannot be modified");
+});
+
 const AuditLog = mongoose.model("AuditLog", auditLogSchema);
 
 export { AuditLog, AUDIT_ACTIONS };

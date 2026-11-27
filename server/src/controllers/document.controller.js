@@ -577,6 +577,16 @@ export const downloadDocument = async (req, res) => {
     // GCM authentication tag mismatch or corrupted ciphertext
     await logAuditEvent({
       actor: userId,
+      action: "INTEGRITY_CHECK",
+      resourceType: "DOCUMENT",
+      resourceId: document._id,
+      outcome: "FAILURE",
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+      metadata: { check: "AES-256-GCM authentication tag" },
+    });
+    await logAuditEvent({
+      actor: userId,
       action: "DOCUMENT_DOWNLOAD",
       resourceType: "DOCUMENT",
       resourceId: document._id,
@@ -599,6 +609,16 @@ export const downloadDocument = async (req, res) => {
   if (computedHash !== document.integrity.hash) {
     await logAuditEvent({
       actor: userId,
+      action: "INTEGRITY_CHECK",
+      resourceType: "DOCUMENT",
+      resourceId: document._id,
+      outcome: "FAILURE",
+      ipAddress: req.ip,
+      userAgent: req.headers["user-agent"],
+      metadata: { check: "SHA-256 document integrity" },
+    });
+    await logAuditEvent({
+      actor: userId,
       action: "DOCUMENT_DOWNLOAD",
       resourceType: "DOCUMENT",
       resourceId: document._id,
@@ -615,6 +635,17 @@ export const downloadDocument = async (req, res) => {
       500
     );
   }
+
+  await logAuditEvent({
+    actor: userId,
+    action: "INTEGRITY_CHECK",
+    resourceType: "DOCUMENT",
+    resourceId: document._id,
+    outcome: "SUCCESS",
+    ipAddress: req.ip,
+    userAgent: req.headers["user-agent"],
+    metadata: { checks: ["AES-256-GCM authentication tag", "SHA-256 document integrity"] },
+  });
 
   // 7. Record successful audit event
   await logAuditEvent({

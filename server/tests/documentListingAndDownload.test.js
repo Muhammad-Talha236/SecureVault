@@ -201,7 +201,7 @@ describe("My Documents Listing & Secure Download API Suite", () => {
     // Prune test records from MongoDB
     const testUserIds = [userA?._id, userB?._id, adminUser?._id].filter(Boolean);
     await Document.deleteMany({ owner: { $in: testUserIds } });
-    await AuditLog.deleteMany({ actor: { $in: testUserIds } });
+    await AuditLog.collection.deleteMany({ actor: { $in: testUserIds } });
     await User.deleteMany({ _id: { $in: testUserIds } });
 
     server.close();
