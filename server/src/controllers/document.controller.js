@@ -9,6 +9,7 @@ import { encryptBuffer, decryptBuffer, computeSha256 } from "../utils/encryption
 import { supabase, SUPABASE_BUCKET } from "../config/supabase.js";
 import { logAuditEvent } from "../utils/audit.utils.js";
 import { AppError } from "../middleware/error.middleware.js";
+import { verifyUserAccess } from "../services/sharing.service.js";
 
 /**
  * Format bytes into human-readable strings (e.g. 2.4 MB)
@@ -363,35 +364,17 @@ const sanitizeDownloadFilename = (originalName) => {
  * @returns {Promise<{ authorized: boolean, reason?: string, role?: string }>}
  */
 export const checkDocumentAccess = async (document, userId) => {
-  if (!document || !userId) {
-    return { authorized: false, reason: "Invalid document or user reference." };
+  const result = await verifyUserAccess(document?._id, userId, "VIEWER");
+  if (!result.authorized) {
+    const reason =
+      result.reason === "PERMISSION_EXPIRED"
+        ? "Access grant has expired"
+        : result.reason === "PERMISSION_REVOKED"
+          ? "Access denied: permission revoked"
+          : "Access denied. You do not have permission to download this document.";
+    return { authorized: false, reason };
   }
-
-  // 1. Direct Ownership Check
-  if (document.owner.toString() === userId.toString()) {
-    return { authorized: true, role: "OWNER" };
-  }
-
-  // 2. DocumentPermission Check (compatible with sharing/collaboration module)
-  const permission = await DocumentPermission.findOne({
-    document: document._id,
-    user: userId,
-    status: "ACTIVE",
-    $or: [
-      { expiresAt: null },
-      { expiresAt: { $gt: new Date() } },
-    ],
-  }).lean();
-
-  if (permission && ["VIEWER", "EDITOR"].includes(permission.permission)) {
-    return { authorized: true, role: permission.permission };
-  }
-
-  // Explicitly: No automatic ADMIN bypass without explicit ownership or granted permission
-  return {
-    authorized: false,
-    reason: "Access denied. You do not have permission to download this document.",
-  };
+  return { authorized: true, role: result.permission };
 };
 
 /**
@@ -533,6 +516,22 @@ export const downloadDocument = async (req, res) => {
         reason: accessResult.reason || "Unauthorized download attempt",
       },
     });
+    if (accessResult.reason === "Access grant has expired") {
+      await logAuditEvent({
+        actor: userId,
+        action: "ACCESS_DENIED",
+        resourceType: "DOCUMENT",
+        resourceId: document._id,
+        outcome: "DENIED",
+        ipAddress: req.ip,
+        userAgent: req.headers["user-agent"],
+        metadata: {
+          documentId: document._id,
+          reason: "Access grant has expired",
+          accessCheck: "PERMISSION_EXPIRATION",
+        },
+      });
+    }
 
     throw new AppError(
       accessResult.reason || "Access denied. You do not have permission to download this document.",

@@ -25,8 +25,12 @@ import {
   Calendar,
   HardDrive,
   FileCheck2,
+  Share2,
+  Users,
 } from "lucide-react";
 import UploadModal from "../components/UploadModal.jsx";
+import ShareModal from "../components/ShareModal.jsx";
+import CollaboratorsList from "../components/CollaboratorsList.jsx";
 import { secureFetch } from "../utils/api.js";
 import "./MyDocuments.css";
 
@@ -128,6 +132,8 @@ export default function MyDocuments() {
   const [page, setPage] = useState(1);
 
   const [isUploadOpen, setIsUploadOpen] = useState(false);
+  const [shareTarget, setShareTarget] = useState(null);
+  const [collaboratorsTarget, setCollaboratorsTarget] = useState(null);
   const [downloadingId, setDownloadingId] = useState(null);
   const [deleteTarget, setDeleteTarget] = useState(null);
   const [isDeleting, setIsDeleting] = useState(false);
@@ -301,6 +307,19 @@ export default function MyDocuments() {
           setTimeout(() => setSuccessMsg(""), 4500);
         }}
       />
+      {shareTarget && (
+        <ShareModal
+          documentItem={shareTarget}
+          onClose={() => setShareTarget(null)}
+          onShared={() => setSuccessMsg(`"${shareTarget.originalName}" was shared successfully.`)}
+        />
+      )}
+      {collaboratorsTarget && (
+        <CollaboratorsList
+          documentItem={collaboratorsTarget}
+          onClose={() => setCollaboratorsTarget(null)}
+        />
+      )}
 
       {/* 2. Page Header */}
       <header className="docs-header">
@@ -607,6 +626,30 @@ export default function MyDocuments() {
                                     <Download size={15} />
                                     <span>Download &amp; Decrypt</span>
                                   </button>
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="dropdown-item"
+                                    onClick={() => {
+                                      setOpenMenuId(null);
+                                      setShareTarget(doc);
+                                    }}
+                                  >
+                                    <Share2 size={15} />
+                                    <span>Share Document</span>
+                                  </button>
+                                  <button
+                                    type="button"
+                                    role="menuitem"
+                                    className="dropdown-item"
+                                    onClick={() => {
+                                      setOpenMenuId(null);
+                                      setCollaboratorsTarget(doc);
+                                    }}
+                                  >
+                                    <Users size={15} />
+                                    <span>Manage Access</span>
+                                  </button>
                                   <div className="dropdown-divider" />
                                   <button
                                     type="button"
@@ -681,6 +724,30 @@ export default function MyDocuments() {
                             >
                               <Download size={15} />
                               <span>Download &amp; Decrypt</span>
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="dropdown-item"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                setShareTarget(doc);
+                              }}
+                            >
+                              <Share2 size={15} />
+                              <span>Share Document</span>
+                            </button>
+                            <button
+                              type="button"
+                              role="menuitem"
+                              className="dropdown-item"
+                              onClick={() => {
+                                setOpenMenuId(null);
+                                setCollaboratorsTarget(doc);
+                              }}
+                            >
+                              <Users size={15} />
+                              <span>Manage Access</span>
                             </button>
                             <div className="dropdown-divider" />
                             <button

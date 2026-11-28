@@ -8,6 +8,7 @@ import Placeholder from "./pages/Placeholder.jsx";
 import Login from "./pages/Login.jsx";
 import Register from "./pages/Register.jsx";
 import AuditLogs from "./pages/AuditLogs.jsx";
+import SharedWithMe from "./pages/SharedWithMe.jsx";
 import ProtectedRoute from "./components/ProtectedRoute.jsx";
 import { AuthProvider, useAuth } from "./context/AuthContext.jsx";
 import { ThemeProvider, useTheme } from "./context/ThemeContext.jsx";
@@ -34,9 +35,7 @@ function RootRedirect() {
 function AppRoutes() {
   const { theme, toggleTheme } = useTheme();
 
-  // Assigned to Faiza (Document Sharing)
   const userPlaceholders = [
-    ["shared", "Shared With Me"],
     ["activity", "My Activity"],
   ];
 
@@ -76,6 +75,7 @@ function AppRoutes() {
       >
         <Route index element={<Dashboard audience="User" />} />
         <Route path="my-documents" element={<MyDocuments />} />
+        <Route path="shared" element={<SharedWithMe />} />
         {userPlaceholders.map(([path, title]) => (
           <Route key={path} path={path} element={<Placeholder title={title} />} />
         ))}
