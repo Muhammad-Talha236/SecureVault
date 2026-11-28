@@ -7,6 +7,7 @@ import authRoutes from "./routes/auth.routes.js";
 import documentRoutes from "./routes/document.routes.js";
 import adminRoutes from "./routes/admin.routes.js";
 import auditRoutes from "./routes/audit.routes.js";
+import sharingRoutes from "./routes/sharing.routes.js";
 import { notFoundHandler, errorHandler } from "./middleware/error.middleware.js";
 
 const app = express();
@@ -74,6 +75,7 @@ app.use(cookieParser());
 app.get("/", (_req, res) => res.json({ success: true, message: "SecureVault API is running" }));
 app.use("/api/health", healthRoutes);
 app.use("/api/auth", authRoutes);
+app.use("/api/documents", sharingRoutes);
 app.use("/api/documents", documentRoutes);
 app.use("/api/admin", adminRoutes);
 app.use("/api/audit-logs", auditRoutes);
